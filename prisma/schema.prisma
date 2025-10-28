@@ -1,0 +1,277 @@
+// --- 1. Configuración de Prisma ---
+// Le dice a Prisma cómo conectarse (MariaDB usa el conector "mysql")
+// y dónde encontrar la URL de conexión (en el archivo .env)
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Le dice a Prisma cómo generar el cliente de TypeScript
+generator client {
+  provider = "prisma-client-js"
+}
+
+
+// --- 2. Definición de Enums (Tipos de Dato Personalizados) ---
+// (Cumple con los requerimientos [cite: 143, 150-152])
+enum RolUsuario {
+  admin
+  empleado
+}
+
+enum TipoAjuste {
+  entrada
+  salida
+}
+
+enum EstadoOrdenCompra {
+  pendiente
+  recibida
+  cancelada
+}
+
+
+// --- 3. Modelos de Base de Datos ---
+
+// --- Tabla Maestra (Global) ---
+// (Cumple con la arquitectura [cite: 39-50])
+model Tenants {
+  id             Int      @id @default(autoincrement())
+  nombre_empresa String
+  subdominio     String   @unique
+  isActive       Boolean  @default(false)
+  configuracion  Json?
+  created_at     DateTime @default(now()) @map("created_at")
+
+  // --- Relaciones (Un Tenant tiene MUCHOS de estos) ---
+  Usuarios            Usuarios[]
+  Categorias          Categorias[]
+  Productos           Productos[]
+  InventarioAjustes   InventarioAjustes[]
+  Proveedores         Proveedores[]
+  OrdenesCompra       OrdenesCompra[]
+  OrdenCompraDetalles OrdenCompraDetalles[]
+  Clientes            Clientes[]
+  Ventas              Ventas[]
+  VentaDetalles       VentaDetalles[]
+}
+
+// --- Tablas de Negocio (Aisladas por Tenant) ---
+// Todas las tablas de aquí abajo CUMPLEN con la regla [cite: 51-61]
+// de tener un 'tenant_id' y una relación con 'Tenants'.
+
+model Usuarios {
+  id            Int         @id @default(autoincrement())
+  email         String
+  password_hash String
+  nombre        String?
+  rol           RolUsuario  @default(empleado) // Usamos el Enum
+  
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id     Int
+  tenant        Tenants     @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  // --- Relaciones ---
+  ajustes_inventario InventarioAjustes[]
+  ordenes_compra     OrdenesCompra[]
+  ventas             Ventas[]
+
+  @@unique([tenant_id, email]) // El email es único POR tenant
+  @@index([tenant_id])
+}
+
+model Categorias {
+  id          Int     @id @default(autoincrement())
+  nombre      String
+  descripcion String?
+
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id   Int
+  tenant      Tenants @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  // --- Relaciones ---
+  Productos   Productos[]
+
+  @@unique([tenant_id, nombre])
+  @@index([tenant_id])
+}
+
+model Productos {
+  id             Int      @id @default(autoincrement())
+  nombre         String
+  sku            String?
+  descripcion    String?
+  precio_venta   Decimal
+  costo_compra   Decimal?
+  stock          Int      @default(0)
+  stock_minimo   Int      @default(5)
+
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id      Int
+  tenant         Tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  // --- Relación Opcional con Categoría ---
+  categoria_id   Int?
+  categoria      Categorias? @relation(fields: [categoria_id], references: [id], onDelete: SetNull)
+
+  // --- Relaciones ---
+  InventarioAjustes   InventarioAjustes[]
+  OrdenCompraDetalles OrdenCompraDetalles[]
+  VentaDetalles       VentaDetalles[]
+
+  @@unique([tenant_id, sku])
+  @@index([tenant_id])
+  @@index([categoria_id])
+}
+
+model InventarioAjustes {
+  id          Int        @id @default(autoincrement())
+  tipo        TipoAjuste // Usamos el Enum
+  cantidad    Int
+  motivo      String
+  created_at  DateTime   @default(now()) @map("created_at")
+  
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id   Int
+  tenant      Tenants    @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  // --- Relaciones ---
+  producto_id Int
+  producto    Productos  @relation(fields: [producto_id], references: [id], onDelete: Cascade)
+  
+  usuario_id  Int?
+  usuario     Usuarios?  @relation(fields: [usuario_id], references: [id], onDelete: SetNull)
+
+  @@index([tenant_id])
+  @@index([producto_id])
+  @@index([usuario_id])
+}
+
+model Proveedores {
+  id            Int     @id @default(autoincrement())
+  nombre        String
+  ruc_identidad String?
+  email         String?
+  telefono      String?
+  direccion     String?
+
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id     Int
+  tenant        Tenants @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  // --- Relaciones ---
+  OrdenesCompra OrdenesCompra[]
+
+  @@unique([tenant_id, ruc_identidad])
+  @@index([tenant_id])
+}
+
+model OrdenesCompra {
+  id              Int                 @id @default(autoincrement())
+  total           Decimal?
+  estado          EstadoOrdenCompra   @default(pendiente) // Usamos el Enum
+  fecha_creacion  DateTime            @default(now()) @map("fecha_creacion")
+  fecha_recepcion DateTime?           @map("fecha_recepcion")
+  
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id       Int
+  tenant          Tenants             @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  // --- Relaciones ---
+  proveedor_id    Int?
+  proveedor       Proveedores?        @relation(fields: [proveedor_id], references: [id], onDelete: SetNull)
+  
+  usuario_id      Int?
+  usuario         Usuarios?           @relation(fields: [usuario_id], references: [id], onDelete: SetNull)
+
+  OrdenCompraDetalles OrdenCompraDetalles[]
+
+  @@index([tenant_id])
+  @@index([proveedor_id])
+  @@index([usuario_id])
+}
+
+model OrdenCompraDetalles {
+  id              Int     @id @default(autoincrement())
+  cantidad        Int
+  costo_unitario  Decimal
+
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id         Int
+  tenant            Tenants     @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  // --- Relaciones ---
+  orden_compra_id   Int
+  orden_compra      OrdenesCompra @relation(fields: [orden_compra_id], references: [id], onDelete: Cascade)
+
+  producto_id       Int
+  producto          Productos   @relation(fields: [producto_id], references: [id]) // Sin onDelete: Cascade aquí
+
+  @@index([tenant_id])
+  @@index([orden_compra_id])
+  @@index([producto_id])
+}
+
+model Clientes {
+  id                  Int     @id @default(autoincrement())
+  nombre              String
+  documento_identidad String?
+  email               String?
+  telefono            String?
+  direccion           String?
+
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id           Int
+  tenant              Tenants @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  // --- Relaciones ---
+  Ventas              Ventas[]
+
+  @@unique([tenant_id, documento_identidad])
+  @@index([tenant_id])
+}
+
+model Ventas {
+  id          Int       @id @default(autoincrement())
+  total       Decimal
+  metodo_pago String?
+  created_at  DateTime  @default(now()) @map("created_at")
+
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id   Int
+  tenant      Tenants   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  // --- Relaciones ---
+  cliente_id  Int?
+  cliente     Clientes? @relation(fields: [cliente_id], references: [id], onDelete: SetNull)
+
+  usuario_id  Int?
+  usuario     Usuarios? @relation(fields: [usuario_id], references: [id], onDelete: SetNull)
+
+  VentaDetalles VentaDetalles[]
+
+  @@index([tenant_id])
+  @@index([cliente_id])
+  @@index([usuario_id])
+}
+
+model VentaDetalles {
+  id              Int     @id @default(autoincrement())
+  cantidad        Int
+  precio_unitario Decimal
+
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id       Int
+  tenant          Tenants   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  // --- Relaciones ---
+  venta_id        Int
+  venta           Ventas    @relation(fields: [venta_id], references: [id], onDelete: Cascade)
+
+  producto_id     Int
+  producto        Productos @relation(fields: [producto_id], references: [id]) // Sin onDelete: Cascade aquí
+
+  @@index([tenant_id])
+  @@index([venta_id])
+  @@index([producto_id])
+}
