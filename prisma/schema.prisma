@@ -13,7 +13,6 @@ generator client {
 
 
 // --- 2. Definición de Enums (Tipos de Dato Personalizados) ---
-// (Cumple con los requerimientos [cite: 143, 150-152])
 enum RolUsuario {
   admin
   empleado
@@ -30,11 +29,23 @@ enum EstadoOrdenCompra {
   cancelada
 }
 
+// --- ENUMS AÑADIDOS PARA PEDIDOS/RESERVAS ---
+enum EstadoPedido {
+  pendiente
+  confirmado
+  cancelado
+  entregado
+}
+
+enum TipoRecojo {
+  tienda
+  envio
+}
+
 
 // --- 3. Modelos de Base de Datos ---
 
 // --- Tabla Maestra (Global) ---
-// (Cumple con la arquitectura [cite: 39-50])
 model Tenants {
   id             Int      @id @default(autoincrement())
   nombre_empresa String
@@ -54,10 +65,13 @@ model Tenants {
   Clientes            Clientes[]
   Ventas              Ventas[]
   VentaDetalles       VentaDetalles[]
+  // --- Relaciones añadidas para Pedidos ---
+  Pedidos             Pedidos[]
+  PedidoDetalles      PedidoDetalles[]
 }
 
 // --- Tablas de Negocio (Aisladas por Tenant) ---
-// Todas las tablas de aquí abajo CUMPLEN con la regla [cite: 51-61]
+// Todas las tablas de aquí abajo CUMPLEN con la regla
 // de tener un 'tenant_id' y una relación con 'Tenants'.
 
 model Usuarios {
@@ -66,7 +80,7 @@ model Usuarios {
   password_hash String
   nombre        String?
   rol           RolUsuario  @default(empleado) // Usamos el Enum
-  
+
   // --- Aislamiento Multi-Tenant ---
   tenant_id     Int
   tenant        Tenants     @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
@@ -75,6 +89,8 @@ model Usuarios {
   ajustes_inventario InventarioAjustes[]
   ordenes_compra     OrdenesCompra[]
   ventas             Ventas[]
+  // --- Relación añadida para Pedidos ---
+  pedidos_gestionados Pedidos[] @relation("UsuarioGestionPedido") // Pedidos gestionados por este empleado
 
   @@unique([tenant_id, email]) // El email es único POR tenant
   @@index([tenant_id])
@@ -88,7 +104,7 @@ model Categorias {
   // --- Aislamiento Multi-Tenant ---
   tenant_id   Int
   tenant      Tenants @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  
+
   // --- Relaciones ---
   Productos   Productos[]
 
@@ -109,7 +125,7 @@ model Productos {
   // --- Aislamiento Multi-Tenant ---
   tenant_id      Int
   tenant         Tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  
+
   // --- Relación Opcional con Categoría ---
   categoria_id   Int?
   categoria      Categorias? @relation(fields: [categoria_id], references: [id], onDelete: SetNull)
@@ -118,6 +134,8 @@ model Productos {
   InventarioAjustes   InventarioAjustes[]
   OrdenCompraDetalles OrdenCompraDetalles[]
   VentaDetalles       VentaDetalles[]
+  // --- Relación añadida para Pedidos ---
+  pedido_detalles     PedidoDetalles[]
 
   @@unique([tenant_id, sku])
   @@index([tenant_id])
@@ -130,7 +148,7 @@ model InventarioAjustes {
   cantidad    Int
   motivo      String
   created_at  DateTime   @default(now()) @map("created_at")
-  
+
   // --- Aislamiento Multi-Tenant ---
   tenant_id   Int
   tenant      Tenants    @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
@@ -138,7 +156,7 @@ model InventarioAjustes {
   // --- Relaciones ---
   producto_id Int
   producto    Productos  @relation(fields: [producto_id], references: [id], onDelete: Cascade)
-  
+
   usuario_id  Int?
   usuario     Usuarios?  @relation(fields: [usuario_id], references: [id], onDelete: SetNull)
 
@@ -172,15 +190,15 @@ model OrdenesCompra {
   estado          EstadoOrdenCompra   @default(pendiente) // Usamos el Enum
   fecha_creacion  DateTime            @default(now()) @map("fecha_creacion")
   fecha_recepcion DateTime?           @map("fecha_recepcion")
-  
+
   // --- Aislamiento Multi-Tenant ---
   tenant_id       Int
   tenant          Tenants             @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  
+
   // --- Relaciones ---
   proveedor_id    Int?
   proveedor       Proveedores?        @relation(fields: [proveedor_id], references: [id], onDelete: SetNull)
-  
+
   usuario_id      Int?
   usuario         Usuarios?           @relation(fields: [usuario_id], references: [id], onDelete: SetNull)
 
@@ -199,7 +217,7 @@ model OrdenCompraDetalles {
   // --- Aislamiento Multi-Tenant ---
   tenant_id         Int
   tenant            Tenants     @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  
+
   // --- Relaciones ---
   orden_compra_id   Int
   orden_compra      OrdenesCompra @relation(fields: [orden_compra_id], references: [id], onDelete: Cascade)
@@ -226,6 +244,8 @@ model Clientes {
 
   // --- Relaciones ---
   Ventas              Ventas[]
+  // --- Relación añadida para Pedidos ---
+  pedidos             Pedidos[]
 
   @@unique([tenant_id, documento_identidad])
   @@index([tenant_id])
@@ -248,11 +268,16 @@ model Ventas {
   usuario_id  Int?
   usuario     Usuarios? @relation(fields: [usuario_id], references: [id], onDelete: SetNull)
 
+  // --- Relación añadida para "Generar Venta POS" ---
+  pedido_origen_id Int?      @unique // Un pedido solo puede generar una venta
+  pedido_origen    Pedidos?  @relation("VentaGenerada", fields: [pedido_origen_id], references: [id], onDelete: SetNull)
+
   VentaDetalles VentaDetalles[]
 
   @@index([tenant_id])
   @@index([cliente_id])
   @@index([usuario_id])
+  @@index([pedido_origen_id]) // --- Índice añadido ---
 }
 
 model VentaDetalles {
@@ -263,7 +288,7 @@ model VentaDetalles {
   // --- Aislamiento Multi-Tenant ---
   tenant_id       Int
   tenant          Tenants   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  
+
   // --- Relaciones ---
   venta_id        Int
   venta           Ventas    @relation(fields: [venta_id], references: [id], onDelete: Cascade)
@@ -273,5 +298,56 @@ model VentaDetalles {
 
   @@index([tenant_id])
   @@index([venta_id])
+  @@index([producto_id])
+}
+
+// --- NUEVOS MODELOS PARA PEDIDOS/RESERVAS ---
+
+model Pedidos {
+  id                 Int       @id @default(autoincrement())
+  created_at         DateTime  @default(now()) @map("created_at")
+  estado             EstadoPedido @default(pendiente)
+  tipo_recojo        TipoRecojo
+
+  // --- Aislamiento Multi-Tenant (OBLIGATORIO) ---
+  tenant_id          Int
+  tenant             Tenants   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  // --- Relaciones ---
+  cliente_id         Int?
+  cliente            Clientes? @relation(fields: [cliente_id], references: [id], onDelete: SetNull)
+
+  // Usuario que gestionó (confirmó/canceló) el pedido
+  usuario_gestion_id Int?
+  usuario_gestion    Usuarios? @relation("UsuarioGestionPedido", fields: [usuario_gestion_id], references: [id], onDelete: SetNull)
+
+  // Relación con los items del pedido
+  detalles           PedidoDetalles[]
+
+  // Relación con la venta generada (para "Generar Venta POS")
+  venta_generada     Ventas?   @relation("VentaGenerada")
+
+  @@index([tenant_id])
+  @@index([cliente_id])
+  @@index([usuario_gestion_id])
+}
+
+model PedidoDetalles {
+  id          Int     @id @default(autoincrement())
+  cantidad    Int
+
+  // --- Aislamiento Multi-Tenant (OBLIGATORIO) ---
+  tenant_id   Int
+  tenant      Tenants   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  // --- Relaciones ---
+  pedido_id   Int
+  pedido      Pedidos   @relation(fields: [pedido_id], references: [id], onDelete: Cascade)
+
+  producto_id Int
+  producto    Productos @relation(fields: [producto_id], references: [id], onDelete: Restrict) // Evita borrar producto si está en un pedido
+
+  @@index([tenant_id])
+  @@index([pedido_id])
   @@index([producto_id])
 }
