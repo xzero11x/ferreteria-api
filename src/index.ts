@@ -3,12 +3,38 @@ import cors from 'cors';
 import { db } from './config/db';
 import authRoutes from './routes/auth.routes';
 import productosRoutes from './routes/productos.routes';
+import categoriasRoutes from './routes/categorias.routes';
+import clientesRoutes from './routes/clientes.routes';
+import proveedoresRoutes from './routes/proveedores.routes';
 
 const app: Application = express();
 const PORT: number = parseInt(process.env.PORT || '3001');
 
 // Configuración de middlewares
-app.use(cors({ origin: 'http://localhost:5173' }));
+// CORS dinámico por entorno — soporta lista y comodín *.localhost:5173
+const corsOriginsEnv = process.env.CORS_ORIGINS || 'http://localhost:5173';
+const allowedOrigins = corsOriginsEnv.split(',').map(o => o.trim());
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // permitir herramientas como Postman
+    const isAllowed = allowedOrigins.some((allowed) => {
+      if (allowed === origin) return true;
+      // soporte simple para comodín http://*.localhost:5173
+      if (allowed.includes('*.localhost') && origin.startsWith('http://') && origin.endsWith(':5173')) {
+        return origin.includes('.localhost');
+      }
+      // soporte simple para https://*.tudominio.com
+      if (allowed.includes('*') && allowed.startsWith('https://') && allowed.endsWith('.com')) {
+        const base = allowed.replace('https://*.', '');
+        return origin.startsWith('https://') && origin.endsWith('.' + base);
+      }
+      return false;
+    });
+    if (isAllowed) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -31,6 +57,9 @@ app.get('/api/healthcheck', async (req: Request, res: Response) => {
 // Rutas de la API
 app.use('/api/auth', authRoutes);
 app.use('/api/productos', productosRoutes);
+app.use('/api/categorias', categoriasRoutes);
+app.use('/api/clientes', clientesRoutes);
+app.use('/api/proveedores', proveedoresRoutes);
 
 // Iniciar servidor
 try {

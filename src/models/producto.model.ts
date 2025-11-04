@@ -30,6 +30,19 @@ export const createProducto = async (
   const prismaClient = tx || db;
   const { categoria_id, ...productoData } = data;
 
+  // Validación multi-tenant: si se especifica categoría, debe pertenecer al mismo tenant
+  if (categoria_id) {
+    const categoria = await prismaClient.categorias.findUnique({
+      where: { id: categoria_id },
+      select: { id: true, tenant_id: true },
+    });
+    if (!categoria || categoria.tenant_id !== tenantId) {
+      const err = new Error('La categoría no pertenece a este tenant');
+      (err as any).code = 'TENANT_MISMATCH';
+      throw err;
+    }
+  }
+
   return prismaClient.productos.create({
     data: {
       ...productoData,

@@ -8,6 +8,7 @@ Esta es la documentación oficial de los endpoints del backend de la API de Ferr
 - **Arquitectura**: Multi-tenant basada en subdominios
 - **Autenticación**: JWT (JSON Web Tokens)
 - **Formato de Respuesta**: JSON
+- **Roadmap de Implementación**: ver `docs/roadmap-dev-to-prod.md` para hitos, flags y orden lógico.
 
 ---
 
@@ -202,6 +203,264 @@ Content-Type: application/json
 - **409 Conflict**: SKU ya existe para este tenant
 
 ---
+
+## 🗂 Módulo: Categorías (`/api/categorias`)
+
+> **Nota**: Todos los endpoints de categorías requieren autenticación JWT y subdominio válido.
+
+### 5. Obtener Todas las Categorías
+
+**Endpoint**: `GET /api/categorias`
+
+**Descripción**: Lista todas las categorías del tenant autenticado.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/categorias`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+[
+  { "id": 2, "nombre": "Herramientas", "descripcion": "" }
+]
+```
+
+#### Respuestas de Error
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Token no válido para este tenant
+
+### 6. Crear Nueva Categoría
+
+**Endpoint**: `POST /api/categorias`
+
+**Descripción**: Crea una categoría para el tenant autenticado.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/categorias`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+#### Request Body
+```json
+{
+  "nombre": "string (requerido)",
+  "descripcion": "string (opcional)"
+}
+```
+
+#### Respuesta Exitosa (201 Created)
+```json
+{ "id": 10, "nombre": "Herramientas", "descripcion": null }
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: Nombre requerido
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Token no válido para este tenant
+- **409 Conflict**: Ya existe una categoría con ese nombre en este tenant
+
+---
+
+## 👥 Módulo: Clientes (`/api/clientes`)
+
+> **Nota**: Todos los endpoints de clientes requieren autenticación JWT y subdominio válido.
+
+### 7. Obtener Todos los Clientes
+
+**Endpoint**: `GET /api/clientes`
+
+**Descripción**: Lista todos los clientes del tenant autenticado.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/clientes`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+[
+  {
+    "id": 1,
+    "nombre": "Juan Pérez",
+    "documento_identidad": "DNI123",
+    "email": "juan@example.com"
+  }
+]
+```
+
+#### Respuestas de Error
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Token no válido para este tenant
+
+### 8. Crear Nuevo Cliente
+
+**Endpoint**: `POST /api/clientes`
+
+**Descripción**: Crea un cliente para el tenant autenticado.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/clientes`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+#### Request Body
+```json
+{
+  "nombre": "string (requerido)",
+  "documento_identidad": "string (opcional, único por tenant)",
+  "email": "string (opcional)",
+  "telefono": "string (opcional)",
+  "direccion": "string (opcional)"
+}
+```
+
+#### Respuesta Exitosa (201 Created)
+```json
+{
+  "id": 5,
+  "nombre": "Juan Pérez",
+  "documento_identidad": "DNI123",
+  "email": "juan@example.com"
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: Nombre requerido
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Token no válido para este tenant
+- **409 Conflict**: El documento de identidad ya existe en este tenant
+
+---
+
+## 🤝 Módulo: Proveedores (`/api/proveedores`)
+
+> **Nota**: Todos los endpoints de proveedores requieren autenticación JWT y subdominio válido.
+
+### 9. Obtener Todos los Proveedores
+
+**Endpoint**: `GET /api/proveedores`
+
+**Descripción**: Lista todos los proveedores del tenant autenticado.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/proveedores`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+[
+  {
+    "id": 3,
+    "nombre": "Ferretería Suministros SA",
+    "ruc_identidad": "20123456789",
+    "email": "contacto@suministros.com"
+  }
+]
+```
+
+#### Respuestas de Error
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Token no válido para este tenant
+
+### 10. Crear Nuevo Proveedor
+
+**Endpoint**: `POST /api/proveedores`
+
+**Descripción**: Crea un proveedor para el tenant autenticado.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/proveedores`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+#### Request Body
+```json
+{
+  "nombre": "string (requerido)",
+  "ruc_identidad": "string (opcional, único por tenant)",
+  "email": "string (opcional)",
+  "telefono": "string (opcional)",
+  "direccion": "string (opcional)"
+}
+```
+
+#### Respuesta Exitosa (201 Created)
+```json
+{
+  "id": 7,
+  "nombre": "Ferretería Suministros SA",
+  "ruc_identidad": "20123456789",
+  "email": "contacto@suministros.com"
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: Nombre requerido
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Token no válido para este tenant
+- **409 Conflict**: El RUC/identidad ya existe en este tenant
+
+---
+
+## Próximos Endpoints y Orden de Implementación
+
+Este proyecto sigue una cadena de dependencias obligatoria. No se implementan módulos transaccionales sin sus módulos maestros.
+
+### Orden Lógico (Cadena de Dependencias)
+- **Nivel 1: Fundación (Arquitectura y Acceso)**
+  - Tenants (identificación por subdominio) y activación (`isActive`).
+  - Usuarios y Roles.
+  - Autenticación (Login/Registro) con JWT (`tid` en payload).
+
+- **Nivel 2: Módulos Maestros (Sustantivos)**
+  - Categorías: `GET /api/categorias`, `POST /api/categorias` (existentes; ampliar CRUD después).
+  - Productos: `GET /api/productos`, `POST /api/productos` (existentes; ampliar CRUD después).
+  - Clientes: `GET /api/clientes`, `POST /api/clientes` (existentes; ampliar CRUD después).
+  - Proveedores: `GET /api/proveedores`, `POST /api/proveedores` (existentes; ampliar CRUD después).
+
+- **Nivel 3: Módulos Transaccionales (Acciones)**
+  - Ajustes de Inventario: `GET/POST` (depende de Productos y Usuarios).
+  - Órdenes de Compra: `GET/POST` (depende de Productos, Proveedores y Usuarios).
+  - Ventas (POS): `GET/POST` (depende de Productos, Clientes y Usuarios).
+  - Pedidos y Reservas: `GET/POST` (depende de Productos y Clientes; se vincula con Ventas para finalizar).
+
+### Dependencias de Datos Clave
+- `PedidoDetalles.producto_id` referencia obligatoria a `Productos` (ver `prisma/schema.prisma`).
+- `Pedidos.cliente_id` referencia opcional a `Clientes`.
+- `Ventas.pedido_origen_id` vincula la venta generada desde un pedido.
+
+### Enlace a Roadmap
+- Para criterios de aceptación, flags de entorno y orden detallado por hito, ver `docs/roadmap-dev-to-prod.md`.
+
 
 ## 🔧 Información Técnica
 

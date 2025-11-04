@@ -21,3 +21,26 @@ export const createTenant = async (
         data,
     });
 };
+
+/**
+ * Busca un tenant por su ID
+ */
+export const findTenantById = async (id: number) => {
+    return db.tenants.findUnique({
+        where: { id },
+    });
+};
+
+/**
+ * Activa un tenant estableciendo isActive=true
+ */
+export const activateTenantById = async (
+    id: number,
+    tx?: Prisma.TransactionClient
+) => {
+    const prismaClient = tx || db;
+    return prismaClient.tenants.update({
+        where: { id },
+        data: { isActive: true },
+    });
+};

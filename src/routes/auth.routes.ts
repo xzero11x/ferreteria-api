@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import {
     registerTenantHandler,
-    loginHandler
+    loginHandler,
+    verifyTenantHandler
 } from '../controllers/auth.controller';
 import { checkTenant } from '../middlewares/tenant.middleware';
 
@@ -9,6 +10,7 @@ const router = Router();
 
 // Ruta pública - no requiere subdominio
 router.post('/register', registerTenantHandler);
+router.post('/verify', verifyTenantHandler);
 
 // Ruta privada - requiere subdominio válido
 router.post('/login', checkTenant, loginHandler);

@@ -27,7 +27,19 @@ export const createProductoHandler = asyncHandler(
       return;
     }
 
-    const nuevoProducto = await productoModel.createProducto(data, tenantId);
-    res.status(201).json(nuevoProducto);
+    try {
+      const nuevoProducto = await productoModel.createProducto(data, tenantId);
+      res.status(201).json(nuevoProducto);
+    } catch (error: any) {
+      if (error?.code === 'TENANT_MISMATCH') {
+        res.status(403).json({ message: 'La categoría no pertenece a este tenant.' });
+        return;
+      }
+      if (error?.code === 'P2002') {
+        res.status(409).json({ message: 'SKU ya existe en este tenant.' });
+        return;
+      }
+      res.status(500).json({ message: 'Error al crear producto.' });
+    }
   }
 );

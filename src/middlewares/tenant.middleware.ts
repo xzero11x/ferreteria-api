@@ -11,7 +11,10 @@ export interface RequestWithTenant extends Request {
  */
 export const checkTenant = asyncHandler(
     async (req: RequestWithTenant, res: Response, next: NextFunction) => {
-        const hostname = req.hostname;
+        // Extraer hostname considerando posible proxy (solo si TRUST_PROXY=true)
+        const trustProxy = (process.env.TRUST_PROXY || 'false').toLowerCase() === 'true';
+        const forwardedHost = trustProxy ? (req.headers['x-forwarded-host'] as string | undefined) : undefined;
+        const hostname = forwardedHost ?? req.hostname;
         const parts = hostname.split('.');
         const subdominio = parts[0];
 
@@ -23,7 +26,12 @@ export const checkTenant = asyncHandler(
         const tenant = await findTenantBySubdominio(subdominio);
         
         if (!tenant) {
-            res.status(404).json({ message: 'Tenant no válido o inactivo.' });
+            res.status(404).json({ message: 'Tenant no encontrado.' });
+            return;
+        }
+
+        if (!tenant.isActive) {
+            res.status(403).json({ message: 'Tenant inactivo. Completa la verificación antes de continuar.' });
             return;
         }
 

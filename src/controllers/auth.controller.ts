@@ -91,3 +91,42 @@ export const loginHandler = asyncHandler(async (req: RequestWithTenant, res: Res
         }
     });
 });
+
+/**
+ * Verificación manual de tenant (DEV) — activa isActive
+ * Solo permitido si TENANT_ACTIVATION_MODE=manual
+ * Body admite { tenantId } o { subdominio }
+ */
+export const verifyTenantHandler = asyncHandler(async (req: Request, res: Response) => {
+    const mode = (process.env.TENANT_ACTIVATION_MODE || 'manual').toLowerCase();
+    if (mode !== 'manual') {
+        res.status(403).json({ message: 'Activación por correo habilitada. Usa verificación por email en producción.' });
+        return;
+    }
+
+    const { tenantId, subdominio } = req.body as { tenantId?: number; subdominio?: string };
+    if (!tenantId && !subdominio) {
+        res.status(400).json({ message: 'Se requiere tenantId o subdominio.' });
+        return;
+    }
+
+    let tenant: Awaited<ReturnType<typeof tenantModel.findTenantById>> | null = null;
+    if (tenantId) {
+        tenant = await tenantModel.findTenantById(Number(tenantId));
+    } else if (subdominio) {
+        tenant = await tenantModel.findTenantBySubdominio(subdominio);
+    }
+
+    if (!tenant) {
+        res.status(404).json({ message: 'Tenant no encontrado.' });
+        return;
+    }
+
+    if (tenant.isActive) {
+        res.status(200).json({ message: 'Tenant ya estaba activo.', tenantId: tenant.id });
+        return;
+    }
+
+    const updated = await tenantModel.activateTenantById(tenant.id);
+    res.status(200).json({ message: 'Tenant activado manualmente (DEV).', tenantId: updated.id });
+});
