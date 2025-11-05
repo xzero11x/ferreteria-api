@@ -70,3 +70,22 @@ export const checkAuth = asyncHandler(
         }
     }
 );
+
+/**
+ * Middleware de autorización por rol.
+ * Uso: router.post('/ruta', checkTenant, checkAuth, requireRoles(['admin','empleado']), handler)
+ */
+export const requireRoles = (roles: string[]) => asyncHandler(
+  async (req: RequestWithAuth, res: Response, next: NextFunction) => {
+    const userRol = req.user?.rol;
+    if (!userRol) {
+      res.status(401).json({ message: 'No autorizado. Usuario no autenticado.' });
+      return;
+    }
+    if (!roles.includes(userRol)) {
+      res.status(403).json({ message: 'Prohibido. Rol insuficiente para acceder a este recurso.' });
+      return;
+    }
+    next();
+  }
+);

@@ -1,5 +1,6 @@
 import { db } from '../config/db';
 import { type Prisma } from '@prisma/client';
+import { type CreateProveedorDTO, type UpdateProveedorDTO } from '../dtos/proveedor.dto';
 
 /**
  * Obtiene todos los proveedores de un tenant específico
@@ -24,7 +25,7 @@ export const findProveedorByIdAndTenant = async (tenantId: number, id: number) =
  * Crea un nuevo proveedor para un tenant específico
  */
 export const createProveedor = async (
-  data: any, // TODO: Definir DTO para tipado estricto
+  data: CreateProveedorDTO,
   tenantId: number,
   tx?: Prisma.TransactionClient
 ) => {
@@ -39,4 +40,35 @@ export const createProveedor = async (
       tenant_id: tenantId,
     },
   });
+};
+
+/**
+ * Actualiza un proveedor por id dentro de un tenant
+ */
+export const updateProveedorByIdAndTenant = async (
+  tenantId: number,
+  id: number,
+  data: UpdateProveedorDTO
+) => {
+  const existing = await db.proveedores.findFirst({ where: { id, tenant_id: tenantId } });
+  if (!existing) return null;
+  return db.proveedores.update({
+    where: { id },
+    data: {
+      nombre: data.nombre ?? existing.nombre,
+      ruc_identidad: data.ruc_identidad ?? existing.ruc_identidad,
+      email: data.email ?? existing.email,
+      telefono: data.telefono ?? existing.telefono,
+      direccion: data.direccion ?? existing.direccion,
+    },
+  });
+};
+
+/**
+ * Elimina un proveedor por id dentro de un tenant
+ */
+export const deleteProveedorByIdAndTenant = async (tenantId: number, id: number) => {
+  const existing = await db.proveedores.findFirst({ where: { id, tenant_id: tenantId } });
+  if (!existing) return null;
+  return db.proveedores.delete({ where: { id } });
 };

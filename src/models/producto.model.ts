@@ -1,5 +1,6 @@
 import { db } from '../config/db';
 import { type Prisma } from '@prisma/client';
+import { type CreateProductoDTO, type UpdateProductoDTO } from '../dtos/producto.dto';
 
 /**
  * Obtiene todos los productos de un tenant específico
@@ -20,10 +21,22 @@ export const findAllProductosByTenant = async (tenantId: number) => {
 };
 
 /**
+ * Busca un producto por id validando pertenencia al tenant
+ */
+export const findProductoByIdAndTenant = async (tenantId: number, id: number) => {
+  return db.productos.findFirst({
+    where: { id, tenant_id: tenantId },
+    include: {
+      categoria: { select: { nombre: true } },
+    },
+  });
+};
+
+/**
  * Crea un nuevo producto para un tenant específico
  */
 export const createProducto = async (
-  data: any, // TODO: Implementar DTO para tipado estricto
+  data: CreateProductoDTO,
   tenantId: number,
   tx?: Prisma.TransactionClient
 ) => {
@@ -47,15 +60,50 @@ export const createProducto = async (
     data: {
       ...productoData,
       tenant_id: tenantId,
-      ...(categoria_id && {
-        categoria: {
-          connect: {
-            id: categoria_id,
-          },
-        },
-      }),
+      ...(categoria_id && { categoria_id }),
     },
   });
 };
 
-// (Aquí irán 'updateProducto', 'deleteProducto', etc., más adelante)
+/**
+ * Actualiza un producto por id dentro de un tenant
+ */
+export const updateProductoByIdAndTenant = async (
+  tenantId: number,
+  id: number,
+  data: UpdateProductoDTO
+) => {
+  // Verificar existencia y pertenencia al tenant
+  const existing = await db.productos.findFirst({ where: { id, tenant_id: tenantId } });
+  if (!existing) return null;
+
+  // Validar que la categoría pertenezca al tenant si se intenta cambiar
+  if (data.categoria_id) {
+    const categoria = await db.categorias.findUnique({
+      where: { id: data.categoria_id },
+      select: { id: true, tenant_id: true },
+    });
+    if (!categoria || categoria.tenant_id !== tenantId) {
+      const err = new Error('La categoría no pertenece a este tenant');
+      (err as any).code = 'TENANT_MISMATCH';
+      throw err;
+    }
+  }
+
+  return db.productos.update({
+    where: { id },
+    data: {
+      ...data,
+      // no permitir cambiar tenant_id
+    },
+  });
+};
+
+/**
+ * Elimina un producto por id dentro de un tenant
+ */
+export const deleteProductoByIdAndTenant = async (tenantId: number, id: number) => {
+  const existing = await db.productos.findFirst({ where: { id, tenant_id: tenantId } });
+  if (!existing) return null;
+  return db.productos.delete({ where: { id } });
+};

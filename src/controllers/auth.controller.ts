@@ -7,17 +7,18 @@ import jwt from 'jsonwebtoken';
 import { RolUsuario } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
 import { type RequestWithTenant } from '../middlewares/tenant.middleware';
+import { RegisterTenantSchema, LoginSchema, VerifyTenantSchema } from '../dtos/auth.dto';
 
 /**
  * Registra un nuevo tenant y su usuario administrador
  */
 export const registerTenantHandler = asyncHandler(async (req: Request, res: Response) => {
-    const { nombre_empresa, subdominio, email, password } = req.body;
-
-    if (!nombre_empresa || !subdominio || !email || !password) {
-        res.status(400).json({ message: "Todos los campos son requeridos." });
+    const parse = RegisterTenantSchema.safeParse(req.body);
+    if (!parse.success) {
+        res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
         return;
     }
+    const { nombre_empresa, subdominio, email, password } = parse.data;
 
     const existingTenant = await tenantModel.findTenantBySubdominio(subdominio);
     if (existingTenant) {
@@ -54,7 +55,12 @@ export const registerTenantHandler = asyncHandler(async (req: Request, res: Resp
  * Autentica un usuario dentro de un tenant específico
  */
 export const loginHandler = asyncHandler(async (req: RequestWithTenant, res: Response) => {
-    const { email, password } = req.body;
+    const parse = LoginSchema.safeParse(req.body);
+    if (!parse.success) {
+        res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
+        return;
+    }
+    const { email, password } = parse.data;
     const tenantId = req.tenantId;
 
     if (!email || !password || !tenantId) {
@@ -104,11 +110,12 @@ export const verifyTenantHandler = asyncHandler(async (req: Request, res: Respon
         return;
     }
 
-    const { tenantId, subdominio } = req.body as { tenantId?: number; subdominio?: string };
-    if (!tenantId && !subdominio) {
-        res.status(400).json({ message: 'Se requiere tenantId o subdominio.' });
+    const parse = VerifyTenantSchema.safeParse(req.body);
+    if (!parse.success) {
+        res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
         return;
     }
+    const { tenantId, subdominio } = parse.data;
 
     let tenant: Awaited<ReturnType<typeof tenantModel.findTenantById>> | null = null;
     if (tenantId) {

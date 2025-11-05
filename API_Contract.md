@@ -431,35 +431,552 @@ Content-Type: application/json
 
 ---
 
-## Próximos Endpoints y Orden de Implementación
+## 💰 Módulo: Ventas (POS) (`/api/ventas`)
 
-Este proyecto sigue una cadena de dependencias obligatoria. No se implementan módulos transaccionales sin sus módulos maestros.
+> **Nota**: Todos los endpoints de ventas requieren autenticación JWT y subdominio válido.
 
-### Orden Lógico (Cadena de Dependencias)
-- **Nivel 1: Fundación (Arquitectura y Acceso)**
-  - Tenants (identificación por subdominio) y activación (`isActive`).
-  - Usuarios y Roles.
-  - Autenticación (Login/Registro) con JWT (`tid` en payload).
+### 11. Obtener Todas las Ventas
 
-- **Nivel 2: Módulos Maestros (Sustantivos)**
-  - Categorías: `GET /api/categorias`, `POST /api/categorias` (existentes; ampliar CRUD después).
-  - Productos: `GET /api/productos`, `POST /api/productos` (existentes; ampliar CRUD después).
-  - Clientes: `GET /api/clientes`, `POST /api/clientes` (existentes; ampliar CRUD después).
-  - Proveedores: `GET /api/proveedores`, `POST /api/proveedores` (existentes; ampliar CRUD después).
+**Endpoint**: `GET /api/ventas`
 
-- **Nivel 3: Módulos Transaccionales (Acciones)**
-  - Ajustes de Inventario: `GET/POST` (depende de Productos y Usuarios).
-  - Órdenes de Compra: `GET/POST` (depende de Productos, Proveedores y Usuarios).
-  - Ventas (POS): `GET/POST` (depende de Productos, Clientes y Usuarios).
-  - Pedidos y Reservas: `GET/POST` (depende de Productos y Clientes; se vincula con Ventas para finalizar).
+**Descripción**: Lista todas las ventas del tenant con filtros opcionales.
 
-### Dependencias de Datos Clave
-- `PedidoDetalles.producto_id` referencia obligatoria a `Productos` (ver `prisma/schema.prisma`).
-- `Pedidos.cliente_id` referencia opcional a `Clientes`.
-- `Ventas.pedido_origen_id` vincula la venta generada desde un pedido.
+**Acceso**: Privado (Requiere token JWT y subdominio)
 
-### Enlace a Roadmap
-- Para criterios de aceptación, flags de entorno y orden detallado por hito, ver `docs/roadmap-dev-to-prod.md`.
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/ventas`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+**Query Parameters** (opcionales):
+- `cliente_id`: Filtrar por ID de cliente
+- `fecha_inicio`: Filtrar desde fecha (ISO 8601)
+- `fecha_fin`: Filtrar hasta fecha (ISO 8601)
+
+#### Respuesta Exitosa (200 OK)
+```json
+[
+  {
+    "id": 1,
+    "total": 150.50,
+    "metodo_pago": "efectivo",
+    "created_at": "2025-11-04T10:30:00.000Z",
+    "cliente": { "id": 5, "nombre": "Juan Pérez" },
+    "usuario": { "id": 1, "nombre": "Admin User" }
+  }
+]
+```
+
+### 12. Obtener Detalle de Venta
+
+**Endpoint**: `GET /api/ventas/:id`
+
+**Descripción**: Obtiene el detalle completo de una venta específica.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "id": 1,
+  "total": 150.50,
+  "metodo_pago": "efectivo",
+  "created_at": "2025-11-04T10:30:00.000Z",
+  "cliente": { "id": 5, "nombre": "Juan Pérez", "email": "juan@example.com" },
+  "usuario": { "id": 1, "nombre": "Admin User" },
+  "pedido_origen": { "id": 10, "estado": "confirmado", "tipo_recojo": "tienda" },
+  "detalles": [
+    {
+      "id": 1,
+      "producto_id": 3,
+      "producto_nombre": "Martillo",
+      "producto_sku": "MAR-001",
+      "cantidad": 2,
+      "precio_unitario": 50.25,
+      "subtotal": 100.50
+    }
+  ]
+}
+```
+
+### 13. Crear Nueva Venta (POS)
+
+**Endpoint**: `POST /api/ventas`
+
+**Descripción**: Crea una nueva venta, descuenta stock automáticamente.
+
+**Acceso**: Privado (Requiere rol `admin` o `empleado`)
+
+**Roles Permitidos**: `admin`, `empleado`
+
+#### Request Body
+```json
+{
+  "cliente_id": 5,
+  "metodo_pago": "efectivo",
+  "detalles": [
+    {
+      "producto_id": 3,
+      "cantidad": 2,
+      "precio_unitario": 50.25
+    }
+  ]
+}
+```
+
+#### Respuesta Exitosa (201 Created)
+```json
+{
+  "id": 1,
+  "total": 100.50,
+  "metodo_pago": "efectivo",
+  "created_at": "2025-11-04T10:30:00.000Z"
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: Datos inválidos
+- **404 Not Found**: Producto no encontrado
+- **409 Conflict**: Stock insuficiente
+
+---
+
+## 📦 Módulo: Inventario (`/api/inventario`)
+
+> **Nota**: Todos los endpoints de inventario requieren autenticación JWT y subdominio válido.
+
+### 14. Obtener Ajustes de Inventario
+
+**Endpoint**: `GET /api/inventario/ajustes`
+
+**Descripción**: Lista todos los ajustes de inventario del tenant con filtros opcionales.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+**Query Parameters** (opcionales):
+- `producto_id`: Filtrar por ID de producto
+- `tipo`: Filtrar por tipo (`entrada` o `salida`)
+- `fecha_inicio`: Filtrar desde fecha (ISO 8601)
+- `fecha_fin`: Filtrar hasta fecha (ISO 8601)
+
+#### Respuesta Exitosa (200 OK)
+```json
+[
+  {
+    "id": 1,
+    "tipo": "entrada",
+    "cantidad": 50,
+    "motivo": "Compra inicial de inventario",
+    "created_at": "2025-11-04T09:00:00.000Z",
+    "producto": {
+      "id": 3,
+      "nombre": "Martillo",
+      "sku": "MAR-001",
+      "stock_actual": 100
+    },
+    "usuario": { "id": 1, "nombre": "Admin User" }
+  }
+]
+```
+
+### 15. Crear Ajuste de Inventario
+
+**Endpoint**: `POST /api/inventario/ajustes`
+
+**Descripción**: Crea un ajuste de inventario (entrada o salida). Actualiza el stock automáticamente.
+
+**Acceso**: Privado (Requiere rol `admin`)
+
+**Roles Permitidos**: `admin`
+
+#### Request Body
+```json
+{
+  "producto_id": 3,
+  "tipo": "entrada",
+  "cantidad": 50,
+  "motivo": "Ajuste por inventario físico"
+}
+```
+
+#### Respuesta Exitosa (201 Created)
+```json
+{
+  "id": 1,
+  "tipo": "entrada",
+  "cantidad": 50,
+  "motivo": "Ajuste por inventario físico",
+  "created_at": "2025-11-04T09:00:00.000Z",
+  "producto_id": 3
+}
+```
+
+#### Respuestas de Error
+- **404 Not Found**: Producto no encontrado
+- **409 Conflict**: Stock insuficiente para salida
+
+### 16. Obtener Kardex de Producto
+
+**Endpoint**: `GET /api/inventario/kardex/:productoId`
+
+**Descripción**: Obtiene el historial completo de ajustes de un producto específico.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "producto": {
+    "id": 3,
+    "nombre": "Martillo",
+    "sku": "MAR-001",
+    "stock_actual": 100
+  },
+  "ajustes": [
+    {
+      "id": 1,
+      "tipo": "entrada",
+      "cantidad": 50,
+      "motivo": "Compra inicial",
+      "created_at": "2025-11-04T09:00:00.000Z",
+      "usuario": { "id": 1, "nombre": "Admin User" }
+    }
+  ]
+}
+```
+
+---
+
+## 🛒 Módulo: Órdenes de Compra (`/api/compras`)
+
+> **Nota**: Todos los endpoints de compras requieren autenticación JWT y subdominio válido.
+
+### 17. Obtener Todas las Órdenes de Compra
+
+**Endpoint**: `GET /api/compras`
+
+**Descripción**: Lista todas las órdenes de compra del tenant con filtros opcionales.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+**Query Parameters** (opcionales):
+- `proveedor_id`: Filtrar por ID de proveedor
+- `estado`: Filtrar por estado (`pendiente`, `recibida`, `cancelada`)
+- `fecha_inicio`: Filtrar desde fecha (ISO 8601)
+- `fecha_fin`: Filtrar hasta fecha (ISO 8601)
+
+#### Respuesta Exitosa (200 OK)
+```json
+[
+  {
+    "id": 1,
+    "total": 500.00,
+    "estado": "pendiente",
+    "fecha_creacion": "2025-11-03T14:00:00.000Z",
+    "fecha_recepcion": null,
+    "proveedor": {
+      "id": 2,
+      "nombre": "Ferretería Suministros SA",
+      "ruc_identidad": "20123456789"
+    },
+    "usuario": { "id": 1, "nombre": "Admin User" }
+  }
+]
+```
+
+### 18. Obtener Detalle de Orden de Compra
+
+**Endpoint**: `GET /api/compras/:id`
+
+**Descripción**: Obtiene el detalle completo de una orden de compra.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "id": 1,
+  "total": 500.00,
+  "estado": "pendiente",
+  "fecha_creacion": "2025-11-03T14:00:00.000Z",
+  "fecha_recepcion": null,
+  "proveedor": {
+    "id": 2,
+    "nombre": "Ferretería Suministros SA",
+    "ruc_identidad": "20123456789",
+    "email": "contacto@suministros.com",
+    "telefono": "123456789"
+  },
+  "usuario": { "id": 1, "nombre": "Admin User" },
+  "detalles": [
+    {
+      "id": 1,
+      "producto_id": 3,
+      "producto_nombre": "Martillo",
+      "producto_sku": "MAR-001",
+      "stock_actual": 50,
+      "cantidad": 100,
+      "costo_unitario": 5.00,
+      "subtotal": 500.00
+    }
+  ]
+}
+```
+
+### 19. Crear Orden de Compra
+
+**Endpoint**: `POST /api/compras`
+
+**Descripción**: Crea una nueva orden de compra a proveedor.
+
+**Acceso**: Privado (Requiere rol `admin`)
+
+**Roles Permitidos**: `admin`
+
+#### Request Body
+```json
+{
+  "proveedor_id": 2,
+  "detalles": [
+    {
+      "producto_id": 3,
+      "cantidad": 100,
+      "costo_unitario": 5.00
+    }
+  ]
+}
+```
+
+#### Respuesta Exitosa (201 Created)
+```json
+{
+  "id": 1,
+  "total": 500.00,
+  "estado": "pendiente",
+  "fecha_creacion": "2025-11-03T14:00:00.000Z"
+}
+```
+
+### 20. Recibir Orden de Compra (Ingreso de Mercadería)
+
+**Endpoint**: `POST /api/compras/:id/recibir`
+
+**Descripción**: Registra la recepción de mercadería. Actualiza el stock automáticamente y cambia estado a "recibida".
+
+**Acceso**: Privado (Requiere rol `admin` o `empleado` - almacenero)
+
+**Roles Permitidos**: `admin`, `empleado`
+
+#### Request Body (opcional)
+```json
+{
+  "fecha_recepcion": "2025-11-04T10:00:00.000Z"
+}
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "id": 1,
+  "estado": "recibida",
+  "fecha_recepcion": "2025-11-04T10:00:00.000Z",
+  "message": "Orden recibida exitosamente. El stock de los productos ha sido actualizado."
+}
+```
+
+#### Respuestas de Error
+- **404 Not Found**: Orden no encontrada
+- **409 Conflict**: Solo se pueden recibir órdenes pendientes
+
+### 21. Cancelar Orden de Compra
+
+**Endpoint**: `POST /api/compras/:id/cancelar`
+
+**Descripción**: Cancela una orden de compra pendiente.
+
+**Acceso**: Privado (Requiere rol `admin`)
+
+**Roles Permitidos**: `admin`
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "id": 1,
+  "estado": "cancelada",
+  "message": "Orden cancelada exitosamente."
+}
+```
+
+---
+
+## 📋 Módulo: Pedidos y Reservas (`/api/pedidos`)
+
+> **Nota**: Todos los endpoints de pedidos requieren autenticación JWT y subdominio válido.
+
+### 22. Obtener Todos los Pedidos
+
+**Endpoint**: `GET /api/pedidos`
+
+**Descripción**: Lista todos los pedidos del tenant con filtros opcionales.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+**Query Parameters** (opcionales):
+- `estado`: Filtrar por estado (`pendiente`, `confirmado`, `cancelado`, `entregado`)
+
+#### Respuesta Exitosa (200 OK)
+```json
+[
+  {
+    "id": 1,
+    "estado": "pendiente",
+    "tipo_recojo": "tienda",
+    "created_at": "2025-11-02T08:00:00.000Z",
+    "cliente": { "id": 5, "nombre": "Juan Pérez" },
+    "alerta_por_vencer": false
+  }
+]
+```
+
+### 23. Confirmar Pedido
+
+**Endpoint**: `POST /api/pedidos/:id/confirmar`
+
+**Descripción**: Cambia el estado del pedido a "confirmado".
+
+**Acceso**: Privado (Requiere rol `admin` o `empleado`)
+
+**Roles Permitidos**: `admin`, `empleado`
+
+#### Request Body (opcional)
+```json
+{
+  "mensaje": "Su pedido está listo para recoger"
+}
+```
+
+### 24. Generar Venta desde Pedido
+
+**Endpoint**: `POST /api/pedidos/:id/generar-venta`
+
+**Descripción**: Crea una venta en el sistema POS desde un pedido confirmado. Vincula la venta con el pedido y descuenta stock.
+
+**Acceso**: Privado (Requiere rol `admin` o `empleado`)
+
+**Roles Permitidos**: `admin`, `empleado`
+
+#### Request Body (opcional)
+```json
+{
+  "metodo_pago": "efectivo"
+}
+```
+
+#### Respuesta Exitosa (201 Created)
+```json
+{
+  "venta_id": 15,
+  "pedido_id": 1,
+  "total": 100.50,
+  "metodo_pago": "efectivo",
+  "created_at": "2025-11-04T11:00:00.000Z"
+}
+```
+
+---
+
+## ⚙️ Módulo: Configuración del Tenant (`/api/tenant`)
+
+### 25. Obtener Configuración del Tenant
+
+**Endpoint**: `GET /api/tenant/configuracion`
+
+**Descripción**: Obtiene la configuración personalizada del tenant (branding, parámetros).
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "branding": {
+    "logoUrl": "https://cdn.example.com/logo.png",
+    "colorPrimario": "#3B82F6",
+    "nombreApp": "Mi Ferretería"
+  },
+  "pedidos": {
+    "dias_limite_reserva": 3
+  }
+}
+```
+
+### 26. Actualizar Configuración del Tenant
+
+**Endpoint**: `PUT /api/tenant/configuracion`
+
+**Descripción**: Actualiza la configuración del tenant (merge parcial).
+
+**Acceso**: Privado (Requiere rol `admin`)
+
+**Roles Permitidos**: `admin`
+
+#### Request Body
+```json
+{
+  "branding": {
+    "logoUrl": "https://cdn.example.com/new-logo.png",
+    "colorPrimario": "#10B981"
+  },
+  "pedidos": {
+    "dias_limite_reserva": 5
+  }
+}
+```
+
+---
+
+## 📊 Resumen de Implementación
+
+### Estado de Módulos
+
+**✅ Nivel 1: Fundación (100% Completo)**
+- Multi-Tenant con subdominio
+- Autenticación JWT con `tid`
+- Roles y permisos
+- Activación manual de tenants (desarrollo)
+
+**✅ Nivel 2: Módulos Maestros (100% Completo)**
+- Productos (CRUD completo con roles)
+- Categorías (CRUD completo con roles)
+- Clientes (CRUD completo)
+- Proveedores (CRUD completo)
+
+**✅ Nivel 3: Módulos Transaccionales (100% Completo)**
+- Pedidos y Reservas (con generar venta)
+- Ventas (POS) (con descuento automático de stock)
+- Ajustes de Inventario (con kardex)
+- Órdenes de Compra (con recepción de mercadería)
+
+**✅ Configuración (100% Completo)**
+- Configuración de tenant (branding y parámetros)
+- .env.example documentado
+- Healthcheck
+
+### Total de Endpoints Implementados
+
+**~50+ endpoints funcionales** distribuidos en:
+- Autenticación: 3 endpoints
+- Productos: 5 endpoints
+- Categorías: 5 endpoints
+- Clientes: 5 endpoints
+- Proveedores: 5 endpoints
+- Ventas (POS): 5 endpoints
+- Inventario: 5 endpoints
+- Órdenes de Compra: 7 endpoints
+- Pedidos/Reservas: 5 endpoints
+- Configuración Tenant: 2 endpoints
+- Healthcheck: 1 endpoint
 
 
 ## 🔧 Información Técnica
@@ -523,4 +1040,4 @@ Authorization: Bearer <token>
 
 ---
 
-*Última actualización: Noviembre 2024*
+*Última actualización: Noviembre 2025 - Proyecto completo al 100% para desarrollo*

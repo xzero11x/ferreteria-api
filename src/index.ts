@@ -6,6 +6,11 @@ import productosRoutes from './routes/productos.routes';
 import categoriasRoutes from './routes/categorias.routes';
 import clientesRoutes from './routes/clientes.routes';
 import proveedoresRoutes from './routes/proveedores.routes';
+import pedidosRoutes from './routes/pedidos.routes';
+import ventasRoutes from './routes/ventas.routes';
+import inventarioRoutes from './routes/inventario.routes';
+import ordenesCompraRoutes from './routes/ordenes-compra.routes';
+import tenantRoutes from './routes/tenant.routes';
 
 const app: Application = express();
 const PORT: number = parseInt(process.env.PORT || '3001');
@@ -60,6 +65,11 @@ app.use('/api/productos', productosRoutes);
 app.use('/api/categorias', categoriasRoutes);
 app.use('/api/clientes', clientesRoutes);
 app.use('/api/proveedores', proveedoresRoutes);
+app.use('/api/pedidos', pedidosRoutes);
+app.use('/api/ventas', ventasRoutes);
+app.use('/api/inventario', inventarioRoutes);
+app.use('/api/compras', ordenesCompraRoutes);
+app.use('/api/tenant', tenantRoutes);
 
 // Iniciar servidor
 try {

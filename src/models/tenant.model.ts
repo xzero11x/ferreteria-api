@@ -44,3 +44,16 @@ export const activateTenantById = async (
         data: { isActive: true },
     });
 };
+
+/**
+ * Actualiza la configuración JSON del tenant
+ */
+export const updateTenantConfiguracionById = async (
+  id: number,
+  configuracion: Prisma.JsonValue
+) => {
+  return db.tenants.update({
+    where: { id },
+    data: { configuracion },
+  });
+};

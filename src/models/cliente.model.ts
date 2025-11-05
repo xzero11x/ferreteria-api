@@ -1,5 +1,6 @@
 import { db } from '../config/db';
 import { type Prisma } from '@prisma/client';
+import { type CreateClienteDTO, type UpdateClienteDTO } from '../dtos/cliente.dto';
 
 /**
  * Obtiene todos los clientes de un tenant específico
@@ -24,7 +25,7 @@ export const findClienteByIdAndTenant = async (tenantId: number, id: number) => 
  * Crea un nuevo cliente para un tenant específico
  */
 export const createCliente = async (
-  data: any, // TODO: Definir DTO para tipado estricto
+  data: CreateClienteDTO,
   tenantId: number,
   tx?: Prisma.TransactionClient
 ) => {
@@ -39,4 +40,35 @@ export const createCliente = async (
       tenant_id: tenantId,
     },
   });
+};
+
+/**
+ * Actualiza un cliente por id dentro de un tenant
+ */
+export const updateClienteByIdAndTenant = async (
+  tenantId: number,
+  id: number,
+  data: UpdateClienteDTO
+) => {
+  const existing = await db.clientes.findFirst({ where: { id, tenant_id: tenantId } });
+  if (!existing) return null;
+  return db.clientes.update({
+    where: { id },
+    data: {
+      nombre: data.nombre ?? existing.nombre,
+      documento_identidad: data.documento_identidad ?? existing.documento_identidad,
+      email: data.email ?? existing.email,
+      telefono: data.telefono ?? existing.telefono,
+      direccion: data.direccion ?? existing.direccion,
+    },
+  });
+};
+
+/**
+ * Elimina un cliente por id dentro de un tenant
+ */
+export const deleteClienteByIdAndTenant = async (tenantId: number, id: number) => {
+  const existing = await db.clientes.findFirst({ where: { id, tenant_id: tenantId } });
+  if (!existing) return null;
+  return db.clientes.delete({ where: { id } });
 };
