@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "// --- Scripts de Prisma ---": "",
     "db:migrate": "dotenv -- prisma migrate dev",
+    "db:reset": "dotenv -- prisma migrate reset",
     "db:studio": "dotenv -- prisma studio"
   },
   "repository": {

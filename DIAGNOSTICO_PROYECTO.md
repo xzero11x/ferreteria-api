@@ -134,40 +134,34 @@ console.log(`TODO: Enviar email de validación a ${email} con Resend.`);
 
 ---
 
-### 2. **IMPORTANTE**: Endpoints de Roles Parcialmente Implementados en Productos/Categorías
-**Prioridad**: 🟡 **MEDIA**
+### 2. ✅ **VERIFICADO**: Roles Aplicados Correctamente en Productos/Categorías
+**Prioridad**: ✅ **COMPLETADO**
 
-**Problema**:
-- ⚠️ Los endpoints de `productos` y `categorias` no tienen restricción por rol
-- ⚠️ Cualquier usuario autenticado (admin o empleado) puede crear/actualizar/eliminar
+**Estado**:
+- ✅ Los endpoints de `productos` y `categorias` **SÍ tienen** restricción por rol correctamente implementada
+- ✅ Solo administradores pueden crear/actualizar/eliminar
+- ✅ Administradores y empleados pueden consultar (GET)
 
-**Ubicación**:
+**Implementación Actual**:
 ```typescript
 // src/routes/productos.routes.ts
-router.post('/', createProductoHandler); // ❌ Falta requireRoles(['admin'])
-router.put('/:id', updateProductoHandler); // ❌ Falta requireRoles(['admin'])
-router.delete('/:id', deleteProductoHandler); // ❌ Falta requireRoles(['admin'])
+router.get('/', getProductosHandler); // ✅ admin|empleado
+router.get('/:id', getProductoByIdHandler); // ✅ admin|empleado
+router.post('/', requireRoles(['admin']), createProductoHandler); // ✅ solo admin
+router.put('/:id', requireRoles(['admin']), updateProductoHandler); // ✅ solo admin
+router.delete('/:id', requireRoles(['admin']), deleteProductoHandler); // ✅ solo admin
+
+// src/routes/categorias.routes.ts - Misma implementación ✅
 ```
 
-**Impacto según Roadmap**:
+**Cumplimiento con Roadmap (Hito 4)**:
 ```
-Reglas sugeridas (docs/roadmap-dev-to-prod.md - Hito 4):
-- Productos: GET (admin|empleado), POST/PUT/DELETE (admin)
-- Categorías: Similar a productos
-```
-
-**Solución Requerida**:
-```typescript
-// src/routes/productos.routes.ts (Corrección)
-router.get('/', getProductosHandler); // OK: cualquier usuario autenticado
-router.post('/', requireRoles(['admin']), createProductoHandler);
-router.put('/:id', requireRoles(['admin']), updateProductoHandler);
-router.delete('/:id', requireRoles(['admin']), deleteProductoHandler);
-
-// Aplicar lo mismo a categorias.routes.ts
+✅ Productos: GET (admin|empleado), POST/PUT/DELETE (admin) - IMPLEMENTADO
+✅ Categorías: GET (admin|empleado), POST/PUT/DELETE (admin) - IMPLEMENTADO
+✅ Tenant Config: PUT (solo admin) - IMPLEMENTADO
 ```
 
-**Hito Relacionado**: Roadmap - Hito 4
+**Conclusión**: ✅ **Implementación correcta y completa según especificaciones**
 
 ---
 
@@ -297,22 +291,23 @@ Integración con API externa (tipo RENIEC) para validar identidad.
 
 ---
 
-### 7. **MEDIO**: Configuración de Tenant Requiere Validación de Rol
-**Prioridad**: 🟡 **MEDIA**
+### 7. ✅ **VERIFICADO**: Configuración de Tenant con Validación de Rol Correcta
+**Prioridad**: ✅ **COMPLETADO**
 
-**Problema**:
+**Estado**:
 - ✅ Existe `GET /api/tenant/configuracion`
 - ✅ Existe `PUT /api/tenant/configuracion`
-- ⚠️ Falta validación de que solo `admin` puede actualizar
+- ✅ **Validación de rol `admin` correctamente implementada**
 - ✅ Lógica de merge implementada correctamente
 
-**Solución Rápida**:
+**Implementación Actual**:
 ```typescript
 // src/routes/tenant.routes.ts
-router.put('/configuracion', requireRoles(['admin']), updateTenantConfiguracionHandler);
+router.get('/configuracion', getTenantConfiguracionHandler); // ✅ admin|empleado
+router.put('/configuracion', requireRoles(['admin']), updateTenantConfiguracionHandler); // ✅ solo admin
 ```
 
-**Hito Relacionado**: Roadmap - Hito 5
+**Cumplimiento**: ✅ **Implementación correcta según Hito 5 del Roadmap**
 
 ---
 
@@ -384,13 +379,14 @@ Las migraciones están aplicadas:
 ✅ **COMPLETADO PARA DESARROLLO** (correos simulados con logs)
 
 **Roadmap - Hito 4: Roles y Autorización**
-⚠️ **PARCIALMENTE IMPLEMENTADO**
+✅ **COMPLETAMENTE IMPLEMENTADO**
 - ✅ Middleware `requireRoles` existe
-- ❌ No aplicado en productos/categorías
+- ✅ Aplicado correctamente en productos/categorías
 - ✅ Aplicado en pedidos
+- ✅ Aplicado en todas las rutas sensibles
 
 **Roadmap - Hito 5: Configuración del Tenant**
-✅ **IMPLEMENTADO** (falta validación de rol admin)
+✅ **COMPLETAMENTE IMPLEMENTADO** (con validación de rol admin)
 
 **Roadmap - Hito 10: Correo (Resend)**
 ⚪ **NO APLICA** (Fuera del alcance de desarrollo)
@@ -410,9 +406,9 @@ Las migraciones están aplicadas:
 
 ### Observaciones para Desarrollo
 - ✅ JWT_SECRET en `.env` es adecuado para desarrollo (64 caracteres hex)
+- ✅ Validación de roles implementada en todos los endpoints críticos
 - ⚪ No hay rate limiting (no crítico para desarrollo local)
 - ⚪ No hay logs de auditoría (no crítico para desarrollo local)
-- ⚠️ Falta validación adicional de roles en algunos endpoints (debe corregirse)
 
 ---
 
@@ -495,9 +491,9 @@ src/
 - **Proveedores**: ✅ Completo
 - **Pedidos**: ✅ Completo
 - **Tenant**: ✅ Completo
-- **Ventas**: ❌ Falta todo
-- **Inventario**: ❌ Falta todo
-- **Órdenes de Compra**: ❌ Falta todo
+- **Ventas**: ✅ Completo
+- **Inventario**: ✅ Completo
+- **Órdenes de Compra**: ✅ Completo
 
 ---
 
@@ -539,13 +535,13 @@ src/
 
 ## 📊 MÉTRICAS DEL PROYECTO
 
-### Líneas de Código (Estimado)
-- **Controllers**: ~800 líneas
-- **Models**: ~500 líneas
-- **Routes**: ~150 líneas
+### Líneas de Código (Estimado Actualizado)
+- **Controllers**: ~1,500 líneas
+- **Models**: ~900 líneas
+- **Routes**: ~280 líneas
 - **Middlewares**: ~150 líneas
-- **DTOs**: ~300 líneas
-- **Total**: ~1900 líneas de código funcional
+- **DTOs**: ~600 líneas
+- **Total**: ~3,500+ líneas de código funcional
 
 ### Complejidad
 - **Baja**: Endpoints CRUD básicos
