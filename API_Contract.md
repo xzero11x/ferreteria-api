@@ -204,6 +204,129 @@ Content-Type: application/json
 
 ---
 
+### 4.1. Obtener Producto por ID
+
+**Endpoint**: `GET /api/productos/:id`
+
+**Descripción**: Obtiene un producto específico del tenant autenticado.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/productos/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+    "id": 1,
+    "nombre": "Martillo",
+    "sku": "MAR001",
+    "descripcion": "Martillo de acero 500g",
+    "precio_venta": "25.50",
+    "costo_compra": "15.00",
+    "stock": 50,
+    "stock_minimo": 5,
+    "tenant_id": 1,
+    "categoria_id": 2
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido
+- **401 Unauthorized**: Token inválido o expirado
+- **404 Not Found**: Producto no encontrado
+
+---
+
+### 4.2. Actualizar Producto
+
+**Endpoint**: `PUT /api/productos/:id`
+
+**Descripción**: Actualiza los datos de un producto existente.
+
+**Acceso**: Privado (Requiere token JWT, rol admin o empleado)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/productos/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+#### Request Body
+```json
+{
+    "nombre": "string (opcional)",
+    "sku": "string (opcional)",
+    "descripcion": "string (opcional)",
+    "precio_venta": "decimal (opcional)",
+    "costo_compra": "decimal (opcional)",
+    "stock": "integer (opcional)",
+    "stock_minimo": "integer (opcional)",
+    "categoria_id": "integer (opcional)"
+}
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+    "id": 1,
+    "nombre": "Martillo Actualizado",
+    "sku": "MAR001",
+    "descripcion": "Martillo de acero 500g reforzado",
+    "precio_venta": "27.50",
+    "costo_compra": "16.00",
+    "stock": 45,
+    "stock_minimo": 5,
+    "tenant_id": 1,
+    "categoria_id": 2
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido o datos inválidos
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Usuario sin permisos suficientes
+- **404 Not Found**: Producto no encontrado
+- **409 Conflict**: SKU duplicado en el tenant
+
+---
+
+### 4.3. Desactivar Producto (Borrado Lógico)
+
+**Endpoint**: `PATCH /api/productos/:id/desactivar`
+
+**Descripción**: Desactiva un producto (borrado lógico). El producto ya no aparecerá en listados pero se mantiene en la base de datos.
+
+**Acceso**: Privado (Requiere token JWT y rol admin únicamente)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/productos/1/desactivar`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+    "message": "Producto desactivado."
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Usuario no es admin
+- **404 Not Found**: Producto no encontrado
+
+---
+
 ## 🗂 Módulo: Categorías (`/api/categorias`)
 
 > **Nota**: Todos los endpoints de categorías requieren autenticación JWT y subdominio válido.
@@ -268,6 +391,111 @@ Content-Type: application/json
 - **401 Unauthorized**: Token inválido o expirado
 - **403 Forbidden**: Token no válido para este tenant
 - **409 Conflict**: Ya existe una categoría con ese nombre en este tenant
+
+---
+
+### 6.1. Obtener Categoría por ID
+
+**Endpoint**: `GET /api/categorias/:id`
+
+**Descripción**: Obtiene una categoría específica del tenant autenticado.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/categorias/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+    "id": 1,
+    "nombre": "Herramientas",
+    "descripcion": "Categoría de herramientas manuales",
+    "tenant_id": 1
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido
+- **401 Unauthorized**: Token inválido o expirado
+- **404 Not Found**: Categoría no encontrada
+
+---
+
+### 6.2. Actualizar Categoría
+
+**Endpoint**: `PUT /api/categorias/:id`
+
+**Descripción**: Actualiza los datos de una categoría existente.
+
+**Acceso**: Privado (Requiere token JWT, rol admin o empleado)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/categorias/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+#### Request Body
+```json
+{
+    "nombre": "string (opcional)",
+    "descripcion": "string (opcional)"
+}
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+    "id": 1,
+    "nombre": "Herramientas Actualizadas",
+    "descripcion": "Categoría actualizada",
+    "tenant_id": 1
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido o datos inválidos
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Usuario sin permisos suficientes
+- **404 Not Found**: Categoría no encontrada
+- **409 Conflict**: Nombre duplicado en el tenant
+
+---
+
+### 6.3. Desactivar Categoría (Borrado Lógico)
+
+**Endpoint**: `PATCH /api/categorias/:id/desactivar`
+
+**Descripción**: Desactiva una categoría (borrado lógico). La categoría ya no aparecerá en listados pero se mantiene en la base de datos.
+
+**Acceso**: Privado (Requiere token JWT y rol admin únicamente)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/categorias/1/desactivar`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+    "message": "Categoría desactivada."
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Usuario no es admin
+- **404 Not Found**: Categoría no encontrada
 
 ---
 
@@ -351,6 +579,120 @@ Content-Type: application/json
 
 ---
 
+### 8.1. Obtener Cliente por ID
+
+**Endpoint**: `GET /api/clientes/:id`
+
+**Descripción**: Obtiene un cliente específico del tenant autenticado.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/clientes/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+    "id": 1,
+    "nombre": "Juan Pérez",
+    "documento_identidad": "DNI123",
+    "email": "juan@example.com",
+    "telefono": "555-1234",
+    "direccion": "Calle Principal 123",
+    "tenant_id": 1
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido
+- **401 Unauthorized**: Token inválido o expirado
+- **404 Not Found**: Cliente no encontrado
+
+---
+
+### 8.2. Actualizar Cliente
+
+**Endpoint**: `PUT /api/clientes/:id`
+
+**Descripción**: Actualiza los datos de un cliente existente.
+
+**Acceso**: Privado (Requiere token JWT, rol admin o empleado)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/clientes/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+#### Request Body
+```json
+{
+    "nombre": "string (opcional)",
+    "documento_identidad": "string (opcional)",
+    "email": "string (opcional)",
+    "telefono": "string (opcional)",
+    "direccion": "string (opcional)"
+}
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+    "id": 1,
+    "nombre": "Juan Pérez Actualizado",
+    "documento_identidad": "DNI123",
+    "email": "juanperez@email.com",
+    "telefono": "555-5678",
+    "direccion": "Nueva Dirección 456",
+    "tenant_id": 1
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido o datos inválidos
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Usuario sin permisos suficientes
+- **404 Not Found**: Cliente no encontrado
+- **409 Conflict**: Documento de identidad duplicado en el tenant
+
+---
+
+### 8.3. Desactivar Cliente (Borrado Lógico)
+
+**Endpoint**: `PATCH /api/clientes/:id/desactivar`
+
+**Descripción**: Desactiva un cliente (borrado lógico). El cliente ya no aparecerá en listados pero se mantiene en la base de datos.
+
+**Acceso**: Privado (Requiere token JWT y rol admin únicamente)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/clientes/1/desactivar`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+    "message": "Cliente desactivado."
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Usuario no es admin
+- **404 Not Found**: Cliente no encontrado
+
+---
+
 ## 🤝 Módulo: Proveedores (`/api/proveedores`)
 
 > **Nota**: Todos los endpoints de proveedores requieren autenticación JWT y subdominio válido.
@@ -428,6 +770,120 @@ Content-Type: application/json
 - **401 Unauthorized**: Token inválido o expirado
 - **403 Forbidden**: Token no válido para este tenant
 - **409 Conflict**: El RUC/identidad ya existe en este tenant
+
+---
+
+### 10.1. Obtener Proveedor por ID
+
+**Endpoint**: `GET /api/proveedores/:id`
+
+**Descripción**: Obtiene un proveedor específico del tenant autenticado.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/proveedores/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+    "id": 1,
+    "nombre": "Ferretería Suministros SA",
+    "ruc_identidad": "20123456789",
+    "email": "contacto@suministros.com",
+    "telefono": "555-9876",
+    "direccion": "Av. Industrial 456",
+    "tenant_id": 1
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido
+- **401 Unauthorized**: Token inválido o expirado
+- **404 Not Found**: Proveedor no encontrado
+
+---
+
+### 10.2. Actualizar Proveedor
+
+**Endpoint**: `PUT /api/proveedores/:id`
+
+**Descripción**: Actualiza los datos de un proveedor existente.
+
+**Acceso**: Privado (Requiere token JWT, rol admin o empleado)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/proveedores/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+#### Request Body
+```json
+{
+    "nombre": "string (opcional)",
+    "ruc_identidad": "string (opcional)",
+    "email": "string (opcional)",
+    "telefono": "string (opcional)",
+    "direccion": "string (opcional)"
+}
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+    "id": 1,
+    "nombre": "Ferretería Suministros SA Actualizado",
+    "ruc_identidad": "20123456789",
+    "email": "nuevoemail@suministros.com",
+    "telefono": "555-1111",
+    "direccion": "Nueva dirección comercial",
+    "tenant_id": 1
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido o datos inválidos
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Usuario sin permisos suficientes
+- **404 Not Found**: Proveedor no encontrado
+- **409 Conflict**: RUC/identidad duplicado en el tenant
+
+---
+
+### 10.3. Desactivar Proveedor (Borrado Lógico)
+
+**Endpoint**: `PATCH /api/proveedores/:id/desactivar`
+
+**Descripción**: Desactiva un proveedor (borrado lógico). El proveedor ya no aparecerá en listados pero se mantiene en la base de datos.
+
+**Acceso**: Privado (Requiere token JWT y rol admin únicamente)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/proveedores/1/desactivar`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+    "message": "Proveedor desactivado."
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Usuario no es admin
+- **404 Not Found**: Proveedor no encontrado
 
 ---
 
@@ -543,7 +999,222 @@ Authorization: Bearer <jwt_token>
 
 ---
 
-## 📦 Módulo: Inventario (`/api/inventario`)
+## � Módulo: Usuarios (`/api/usuarios`)
+
+> **Nota**: Todos los endpoints de usuarios requieren autenticación JWT, subdominio válido y **rol de admin únicamente**.
+
+### 13.1. Obtener Todos los Usuarios
+
+**Endpoint**: `GET /api/usuarios`
+
+**Descripción**: Lista todos los usuarios (empleados) activos del tenant autenticado.
+
+**Acceso**: Privado (Requiere token JWT, subdominio y rol admin)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/usuarios`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+[
+  {
+    "id": 1,
+    "email": "admin@empresa.com",
+    "nombre": "Administrador Principal",
+    "rol": "admin",
+    "isActive": true,
+    "tenant_id": 1
+  },
+  {
+    "id": 2,
+    "email": "empleado1@empresa.com",
+    "nombre": "Juan Empleado",
+    "rol": "empleado",
+    "isActive": true,
+    "tenant_id": 1
+  }
+]
+```
+
+#### Respuestas de Error
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Usuario no es admin o token no válido para este tenant
+
+---
+
+### 13.2. Crear Nuevo Usuario
+
+**Endpoint**: `POST /api/usuarios`
+
+**Descripción**: Crea un nuevo usuario (empleado o admin) para el tenant autenticado.
+
+**Acceso**: Privado (Requiere token JWT, subdominio y rol admin)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/usuarios`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+#### Request Body
+```json
+{
+  "email": "string (requerido, email válido)",
+  "password": "string (requerido, mínimo 6 caracteres)",
+  "rol": "admin | empleado (requerido)",
+  "nombre": "string (opcional)"
+}
+```
+
+#### Ejemplo de Request
+```json
+{
+  "email": "nuevo@empresa.com",
+  "password": "password123",
+  "rol": "empleado",
+  "nombre": "Nuevo Empleado"
+}
+```
+
+#### Respuesta Exitosa (201 Created)
+```json
+{
+  "id": 3,
+  "email": "nuevo@empresa.com",
+  "nombre": "Nuevo Empleado",
+  "rol": "empleado"
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: Campos requeridos faltantes o datos inválidos
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Usuario no es admin
+- **409 Conflict**: El email ya existe en este tenant
+
+---
+
+### 13.3. Obtener Usuario por ID
+
+**Endpoint**: `GET /api/usuarios/:id`
+
+**Descripción**: Obtiene un usuario específico del tenant autenticado.
+
+**Acceso**: Privado (Requiere token JWT, subdominio y rol admin)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/usuarios/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "id": 1,
+  "email": "admin@empresa.com",
+  "nombre": "Administrador Principal",
+  "rol": "admin",
+  "isActive": true,
+  "tenant_id": 1
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Usuario no es admin
+- **404 Not Found**: Usuario no encontrado
+
+---
+
+### 13.4. Actualizar Usuario
+
+**Endpoint**: `PUT /api/usuarios/:id`
+
+**Descripción**: Actualiza los datos de un usuario existente.
+
+**Acceso**: Privado (Requiere token JWT, subdominio y rol admin)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/usuarios/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+#### Request Body
+```json
+{
+  "email": "string (opcional)",
+  "password": "string (opcional, mínimo 6 caracteres)",
+  "rol": "admin | empleado (opcional)",
+  "nombre": "string (opcional)"
+}
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "id": 1,
+  "email": "admin_actualizado@empresa.com",
+  "nombre": "Admin Actualizado",
+  "rol": "admin",
+  "isActive": true,
+  "tenant_id": 1
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido o datos inválidos
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Usuario no es admin
+- **404 Not Found**: Usuario no encontrado
+- **409 Conflict**: Email duplicado en el tenant
+
+---
+
+### 13.5. Desactivar Usuario (Borrado Lógico)
+
+**Endpoint**: `PATCH /api/usuarios/:id/desactivar`
+
+**Descripción**: Desactiva un usuario (borrado lógico). El usuario ya no podrá iniciar sesión y no aparecerá en listados.
+
+**Acceso**: Privado (Requiere token JWT, subdominio y rol admin)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/usuarios/2/desactivar`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "message": "Usuario desactivado."
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido
+- **401 Unauthorized**: Token inválido o expirado
+- **403 Forbidden**: Usuario no es admin o intenta desactivarse a sí mismo
+- **404 Not Found**: Usuario no encontrado
+
+**Nota importante**: Un usuario admin no puede desactivarse a sí mismo como medida de seguridad.
+
+---
+
+## �📦 Módulo: Inventario (`/api/inventario`)
 
 > **Nota**: Todos los endpoints de inventario requieren autenticación JWT y subdominio válido.
 
@@ -1038,6 +1709,24 @@ Authorization: Bearer <token>
 - Las contraseñas se almacenan hasheadas con bcrypt
 - Los tokens JWT expiran en 24 horas
 
+### 🗑️ Borrado Lógico (Soft Delete)
+
+Los siguientes módulos maestros implementan **borrado lógico** mediante el campo `isActive`:
+
+- **Productos** (`/api/productos/:id/desactivar`)
+- **Categorías** (`/api/categorias/:id/desactivar`)
+- **Clientes** (`/api/clientes/:id/desactivar`)
+- **Proveedores** (`/api/proveedores/:id/desactivar`)
+- **Usuarios** (`/api/usuarios/:id/desactivar`)
+
+**Características del borrado lógico:**
+- Los registros desactivados (`isActive: false`) no aparecen en los listados GET
+- Los datos se mantienen en la base de datos para auditoría e integridad referencial
+- Solo usuarios con rol **admin** pueden desactivar registros
+- El endpoint de desactivación usa el método `PATCH` con la ruta `/:id/desactivar`
+- Los usuarios desactivados no pueden iniciar sesión (validación en `/api/auth/login`)
+- Un usuario admin no puede desactivarse a sí mismo
+
 ---
 
-*Última actualización: Noviembre 2025 - Proyecto completo al 100% para desarrollo*
+*Última actualización: 6 de Noviembre 2025 - Proyecto completo con borrado lógico implementado*

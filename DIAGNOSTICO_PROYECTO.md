@@ -1,9 +1,10 @@
 # 🔍 DIAGNÓSTICO COMPLETO DEL PROYECTO - FERRETERÍA API
 
-**Fecha de Análisis**: 4 de Noviembre, 2025  
+**Fecha de Análisis**: 6 de Noviembre, 2025  
 **Analista**: GitHub Copilot  
 **Estado General del Proyecto**: ✅ **DESARROLLO COMPLETO AL 100%**  
-**Alcance**: 🎯 **DESARROLLO ÚNICAMENTE** (No contempla producción real)
+**Alcance**: 🎯 **DESARROLLO ÚNICAMENTE** (No contempla producción real)  
+**Última Actualización**: ✅ **Implementación de Borrado Lógico en Módulos Maestros**
 
 ---
 
@@ -11,6 +12,8 @@
 
 ### Estado Actual
 El proyecto ha alcanzado la **completitud total** con una arquitectura multi-tenant correctamente implementada y todos los módulos funcionales desarrollados. El código es **sólido, bien estructurado y completamente funcional** para su alcance de desarrollo.
+
+**ACTUALIZACIÓN RECIENTE**: Se implementó exitosamente el **borrado lógico (soft delete)** en los 5 módulos maestros mediante el campo `isActive`, mejorando la integridad de datos y permitiendo auditoría histórica.
 
 **IMPORTANTE**: Este proyecto está diseñado exclusivamente para **entorno de desarrollo**. No se implementarán integraciones con APIs reales (como Resend para emails) ya que el alcance contempla únicamente desarrollo local con activación manual de funcionalidades.
 
@@ -21,6 +24,7 @@ El proyecto ha alcanzado la **completitud total** con una arquitectura multi-ten
 - **DTOs y Validaciones**: ✅ 95% (Excelente)
 - **Documentación**: ✅ 100% (Excepcional y actualizada)
 - **Completitud para Desarrollo**: ✅ 100% (Todos los módulos implementados)
+- **Borrado Lógico**: ✅ 100% (Implementado en 5 módulos maestros)
 
 ---
 
@@ -70,6 +74,7 @@ if (decoded.tid !== req.tenantId) {
 - ✅ Enums definidos para estados y tipos
 - ✅ Modelo de Pedidos/Reservas implementado con relaciones correctas
 - ✅ Vinculación `Ventas.pedido_origen_id` para flujo reserva → venta
+- ✅ **NUEVO**: Campo `isActive Boolean @default(true)` en 5 modelos maestros para borrado lógico
 
 ### 4. DTOs con Validación Zod
 **Estado**: ✅ **BIEN IMPLEMENTADO**
@@ -103,6 +108,51 @@ if (decoded.tid !== req.tenantId) {
 - ✅ Soporte para múltiples orígenes separados por coma
 - ✅ Soporte para comodines (`http://*.localhost:5173`)
 - ✅ Preparado para producción con `https://*.tudominio.com`
+
+### 8. Borrado Lógico (Soft Delete)
+**Estado**: ✅ **IMPLEMENTADO COMPLETAMENTE**
+
+- ✅ Campo `isActive: Boolean @default(true)` agregado a 5 modelos maestros:
+  - `Productos`, `Categorias`, `Clientes`, `Proveedores`, `Usuarios`
+- ✅ Migración de base de datos aplicada exitosamente (`20251107040902_add_is_active`)
+- ✅ Todos los listados (`findAll*`) filtran automáticamente por `isActive: true`
+- ✅ Funciones de eliminación renombradas de `delete*` a `desactivar*`
+- ✅ Endpoints actualizados de `DELETE /:id` a `PATCH /:id/desactivar`
+- ✅ Solo usuarios con rol `admin` pueden desactivar registros
+- ✅ Validación crítica en login: usuarios desactivados (`isActive: false`) no pueden autenticarse
+- ✅ Protección especial: un usuario admin no puede desactivarse a sí mismo
+- ✅ Integridad referencial mantenida: registros históricos preservados
+- ✅ DTOs creados para gestión completa de usuarios
+
+**Código de Referencia**:
+```typescript
+// src/models/producto.model.ts
+export async function findAllProductosByTenant(tenantId: number) {
+  return db.productos.findMany({
+    where: { tenant_id: tenantId, isActive: true }, // ✅ Solo activos
+    include: { categoria: true },
+  });
+}
+
+export async function desactivarProductoByIdAndTenant(tenantId: number, id: number) {
+  return db.productos.update({
+    where: { id, tenant_id: tenantId },
+    data: { isActive: false }, // ✅ Borrado lógico
+  });
+}
+
+// src/controllers/auth.controller.ts
+if (!usuario.isActive) {
+  res.status(401).json({ message: 'Usuario desactivado. Contacta al administrador.' });
+  return;
+}
+```
+
+**Beneficios Implementados**:
+- 🔒 **Integridad de datos**: Registros históricos preservados
+- 📊 **Auditoría**: Posibilidad de rastrear registros desactivados
+- 🔄 **Reversibilidad**: Potencial para reactivar registros en el futuro
+- 🛡️ **Seguridad**: Usuarios desactivados no pueden acceder al sistema
 
 ---
 
@@ -149,16 +199,17 @@ router.get('/', getProductosHandler); // ✅ admin|empleado
 router.get('/:id', getProductoByIdHandler); // ✅ admin|empleado
 router.post('/', requireRoles(['admin']), createProductoHandler); // ✅ solo admin
 router.put('/:id', requireRoles(['admin']), updateProductoHandler); // ✅ solo admin
-router.delete('/:id', requireRoles(['admin']), deleteProductoHandler); // ✅ solo admin
+router.patch('/:id/desactivar', requireRoles(['admin']), desactivarProductoHandler); // ✅ solo admin (borrado lógico)
 
 // src/routes/categorias.routes.ts - Misma implementación ✅
 ```
 
 **Cumplimiento con Roadmap (Hito 4)**:
 ```
-✅ Productos: GET (admin|empleado), POST/PUT/DELETE (admin) - IMPLEMENTADO
-✅ Categorías: GET (admin|empleado), POST/PUT/DELETE (admin) - IMPLEMENTADO
+✅ Productos: GET (admin|empleado), POST/PUT/PATCH-desactivar (admin) - IMPLEMENTADO
+✅ Categorías: GET (admin|empleado), POST/PUT/PATCH-desactivar (admin) - IMPLEMENTADO
 ✅ Tenant Config: PUT (solo admin) - IMPLEMENTADO
+✅ Borrado Lógico: Implementado en 5 módulos maestros con campo isActive
 ```
 
 **Conclusión**: ✅ **Implementación correcta y completa según especificaciones**
@@ -168,42 +219,58 @@ router.delete('/:id', requireRoles(['admin']), deleteProductoHandler); // ✅ so
 ### 3. ✅ **COMPLETADO**: Módulos Maestros (Nivel 2)
 **Prioridad**: 🟡 **MEDIA**
 
-**Problema**:
-Los módulos maestros (Nivel 2 en el roadmap) están parcialmente implementados:
+**Actualización**: Se implementó **borrado lógico** en todos los módulos maestros mediante el campo `isActive`.
 
 #### Clientes
-- ✅ `GET /api/clientes` - Implementado
+- ✅ `GET /api/clientes` - Implementado (solo activos)
 - ✅ `POST /api/clientes` - Implementado
 - ✅ `GET /api/clientes/:id` - Implementado
 - ✅ `PUT /api/clientes/:id` - Implementado
-- ✅ `DELETE /api/clientes/:id` - Implementado
-- **Status**: ✅ COMPLETO
+- ✅ `PATCH /api/clientes/:id/desactivar` - **NUEVO: Borrado lógico**
+- **Status**: ✅ COMPLETO CON BORRADO LÓGICO
 
 #### Proveedores
-- ✅ `GET /api/proveedores` - Implementado
+- ✅ `GET /api/proveedores` - Implementado (solo activos)
 - ✅ `POST /api/proveedores` - Implementado
 - ✅ `GET /api/proveedores/:id` - Implementado
 - ✅ `PUT /api/proveedores/:id` - Implementado
-- ✅ `DELETE /api/proveedores/:id` - Implementado
-- **Status**: ✅ COMPLETO
+- ✅ `PATCH /api/proveedores/:id/desactivar` - **NUEVO: Borrado lógico**
+- **Status**: ✅ COMPLETO CON BORRADO LÓGICO
 
 #### Productos
-- ✅ `GET /api/productos` - Implementado
+- ✅ `GET /api/productos` - Implementado (solo activos)
 - ✅ `POST /api/productos` - Implementado
 - ✅ `GET /api/productos/:id` - Implementado
 - ✅ `PUT /api/productos/:id` - Implementado
-- ✅ `DELETE /api/productos/:id` - Implementado
-- **Status**: ✅ COMPLETO
+- ✅ `PATCH /api/productos/:id/desactivar` - **NUEVO: Borrado lógico**
+- **Status**: ✅ COMPLETO CON BORRADO LÓGICO
 
 #### Categorías
-- ✅ `GET /api/categorias` - Implementado
+- ✅ `GET /api/categorias` - Implementado (solo activos)
 - ✅ `POST /api/categorias` - Implementado
 - ✅ `GET /api/categorias/:id` - Implementado
 - ✅ `PUT /api/categorias/:id` - Implementado
-- ✅ `DELETE /api/categorias/:id` - Implementado
-- **Status**: ✅ COMPLETO
+- ✅ `PATCH /api/categorias/:id/desactivar` - **NUEVO: Borrado lógico**
+- **Status**: ✅ COMPLETO CON BORRADO LÓGICO
 
-**Conclusión**: ✅ **Los módulos maestros (Nivel 2) están 100% completos y funcionales.**
+#### Usuarios (NUEVO)
+- ✅ `GET /api/usuarios` - Implementado (solo activos, solo admin)
+- ✅ `POST /api/usuarios` - Implementado (solo admin)
+- ✅ `GET /api/usuarios/:id` - Implementado (solo admin)
+- ✅ `PUT /api/usuarios/:id` - Implementado (solo admin)
+- ✅ `PATCH /api/usuarios/:id/desactivar` - **NUEVO: Borrado lógico con protección anti-auto-desactivación**
+- **Status**: ✅ COMPLETO CON BORRADO LÓGICO
+
+**Mejoras Implementadas en Borrado Lógico**:
+- ✅ Campo `isActive` agregado a 5 modelos (Productos, Categorías, Clientes, Proveedores, Usuarios)
+- ✅ Migración de base de datos aplicada (`20251107040902_add_is_active`)
+- ✅ Todos los listados filtran automáticamente por `isActive: true`
+- ✅ Funciones `delete*` renombradas a `desactivar*` en todos los modelos
+- ✅ Endpoints cambiados de `DELETE /:id` a `PATCH /:id/desactivar`
+- ✅ Validación en login: usuarios desactivados no pueden autenticarse
+- ✅ Protección especial: un admin no puede desactivarse a sí mismo
+
+**Conclusión**: ✅ **Los módulos maestros (Nivel 2) están 100% completos y funcionales con borrado lógico implementado.**
 
 ---
 

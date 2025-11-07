@@ -6,7 +6,7 @@ import {
     createProductoHandler,
     getProductoByIdHandler,
     updateProductoHandler,
-    deleteProductoHandler
+    desactivarProductoHandler
 } from '../controllers/productos.controller';
 
 const router = Router();
@@ -20,9 +20,11 @@ router.use(checkAuth);
 router.get('/', getProductosHandler);
 router.get('/:id', getProductoByIdHandler);
 
-// POST, PUT, DELETE: solo admin
+// POST, PUT: solo admin
 router.post('/', requireRoles(['admin']), createProductoHandler);
 router.put('/:id', requireRoles(['admin']), updateProductoHandler);
-router.delete('/:id', requireRoles(['admin']), deleteProductoHandler);
+
+// PATCH (desactivar): solo admin
+router.patch('/:id/desactivar', requireRoles(['admin']), desactivarProductoHandler);
 
 export default router;

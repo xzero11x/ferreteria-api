@@ -3,12 +3,13 @@ import { type Prisma } from '@prisma/client';
 import { type CreateProductoDTO, type UpdateProductoDTO } from '../dtos/producto.dto';
 
 /**
- * Obtiene todos los productos de un tenant específico
+ * Obtiene todos los productos de un tenant específico (solo activos)
  */
 export const findAllProductosByTenant = async (tenantId: number) => {
   return db.productos.findMany({
     where: {
       tenant_id: tenantId,
+      isActive: true,
     },
     include: {
       categoria: {
@@ -100,10 +101,13 @@ export const updateProductoByIdAndTenant = async (
 };
 
 /**
- * Elimina un producto por id dentro de un tenant
+ * Desactiva un producto por id dentro de un tenant (borrado lógico)
  */
-export const deleteProductoByIdAndTenant = async (tenantId: number, id: number) => {
+export const desactivarProductoByIdAndTenant = async (tenantId: number, id: number) => {
   const existing = await db.productos.findFirst({ where: { id, tenant_id: tenantId } });
   if (!existing) return null;
-  return db.productos.delete({ where: { id } });
+  return db.productos.update({ 
+    where: { id }, 
+    data: { isActive: false } 
+  });
 };

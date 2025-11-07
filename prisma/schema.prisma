@@ -80,6 +80,7 @@ model Usuarios {
   password_hash String
   nombre        String?
   rol           RolUsuario  @default(empleado) // Usamos el Enum
+  isActive      Boolean     @default(true)     // Borrado lógico
 
   // --- Aislamiento Multi-Tenant ---
   tenant_id     Int
@@ -100,6 +101,7 @@ model Categorias {
   id          Int     @id @default(autoincrement())
   nombre      String
   descripcion String?
+  isActive    Boolean @default(true)  // Borrado lógico
 
   // --- Aislamiento Multi-Tenant ---
   tenant_id   Int
@@ -121,6 +123,7 @@ model Productos {
   costo_compra   Decimal?
   stock          Int      @default(0)
   stock_minimo   Int      @default(5)
+  isActive       Boolean  @default(true)  // Borrado lógico
 
   // --- Aislamiento Multi-Tenant ---
   tenant_id      Int
@@ -172,6 +175,7 @@ model Proveedores {
   email         String?
   telefono      String?
   direccion     String?
+  isActive      Boolean @default(true)  // Borrado lógico
 
   // --- Aislamiento Multi-Tenant ---
   tenant_id     Int
@@ -237,6 +241,7 @@ model Clientes {
   email               String?
   telefono            String?
   direccion           String?
+  isActive            Boolean @default(true)  // Borrado lógico
 
   // --- Aislamiento Multi-Tenant ---
   tenant_id           Int

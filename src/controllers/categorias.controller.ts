@@ -99,9 +99,9 @@ export const updateCategoriaHandler = asyncHandler(
 );
 
 /**
- * Elimina una categoría por id
+ * Desactiva una categoría por id (borrado lógico)
  */
-export const deleteCategoriaHandler = asyncHandler(
+export const desactivarCategoriaHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
     const parsedId = IdParamSchema.safeParse({ id: req.params.id });
@@ -109,11 +109,11 @@ export const deleteCategoriaHandler = asyncHandler(
       res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
       return;
     }
-    const deleted = await categoriaModel.deleteCategoriaByIdAndTenant(tenantId, parsedId.data.id);
+    const deleted = await categoriaModel.desactivarCategoriaByIdAndTenant(tenantId, parsedId.data.id);
     if (!deleted) {
       res.status(404).json({ message: 'Categoría no encontrada.' });
       return;
     }
-    res.status(200).json({ message: 'Categoría eliminada.' });
+    res.status(200).json({ message: 'Categoría desactivada.' });
   }
 );

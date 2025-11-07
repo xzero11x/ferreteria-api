@@ -3,11 +3,14 @@ import { type Prisma } from '@prisma/client';
 import { type CreateClienteDTO, type UpdateClienteDTO } from '../dtos/cliente.dto';
 
 /**
- * Obtiene todos los clientes de un tenant específico
+ * Obtiene todos los clientes de un tenant específico (solo activos)
  */
 export const findAllClientesByTenant = async (tenantId: number) => {
   return db.clientes.findMany({
-    where: { tenant_id: tenantId },
+    where: { 
+      tenant_id: tenantId,
+      isActive: true,
+    },
     orderBy: { nombre: 'asc' },
   });
 };
@@ -65,10 +68,13 @@ export const updateClienteByIdAndTenant = async (
 };
 
 /**
- * Elimina un cliente por id dentro de un tenant
+ * Desactiva un cliente por id dentro de un tenant (borrado lógico)
  */
-export const deleteClienteByIdAndTenant = async (tenantId: number, id: number) => {
+export const desactivarClienteByIdAndTenant = async (tenantId: number, id: number) => {
   const existing = await db.clientes.findFirst({ where: { id, tenant_id: tenantId } });
   if (!existing) return null;
-  return db.clientes.delete({ where: { id } });
+  return db.clientes.update({ 
+    where: { id }, 
+    data: { isActive: false } 
+  });
 };

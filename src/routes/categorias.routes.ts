@@ -6,7 +6,7 @@ import {
   createCategoriaHandler,
   getCategoriaByIdHandler,
   updateCategoriaHandler,
-  deleteCategoriaHandler,
+  desactivarCategoriaHandler,
 } from '../controllers/categorias.controller';
 
 const router = Router();
@@ -20,9 +20,11 @@ router.use(checkAuth);
 router.get('/', getCategoriasHandler);
 router.get('/:id', getCategoriaByIdHandler);
 
-// POST, PUT, DELETE: solo admin
+// POST, PUT: solo admin
 router.post('/', requireRoles(['admin']), createCategoriaHandler);
 router.put('/:id', requireRoles(['admin']), updateCategoriaHandler);
-router.delete('/:id', requireRoles(['admin']), deleteCategoriaHandler);
+
+// PATCH (desactivar): solo admin
+router.patch('/:id/desactivar', requireRoles(['admin']), desactivarCategoriaHandler);
 
 export default router;

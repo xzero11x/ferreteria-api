@@ -3,11 +3,14 @@ import { type Prisma } from '@prisma/client';
 import { type CreateCategoriaDTO, type UpdateCategoriaDTO } from '../dtos/categoria.dto';
 
 /**
- * Obtiene todas las categorías de un tenant específico
+ * Obtiene todas las categorías de un tenant específico (solo activas)
  */
 export const findAllCategoriasByTenant = async (tenantId: number) => {
   return db.categorias.findMany({
-    where: { tenant_id: tenantId },
+    where: { 
+      tenant_id: tenantId,
+      isActive: true,
+    },
     orderBy: { nombre: 'asc' },
   });
 };
@@ -59,10 +62,13 @@ export const updateCategoriaByIdAndTenant = async (
 };
 
 /**
- * Elimina una categoría por id dentro de un tenant
+ * Desactiva una categoría por id dentro de un tenant (borrado lógico)
  */
-export const deleteCategoriaByIdAndTenant = async (tenantId: number, id: number) => {
+export const desactivarCategoriaByIdAndTenant = async (tenantId: number, id: number) => {
   const existing = await db.categorias.findFirst({ where: { id, tenant_id: tenantId } });
   if (!existing) return null;
-  return db.categorias.delete({ where: { id } });
+  return db.categorias.update({ 
+    where: { id }, 
+    data: { isActive: false } 
+  });
 };

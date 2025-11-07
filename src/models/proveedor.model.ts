@@ -3,11 +3,14 @@ import { type Prisma } from '@prisma/client';
 import { type CreateProveedorDTO, type UpdateProveedorDTO } from '../dtos/proveedor.dto';
 
 /**
- * Obtiene todos los proveedores de un tenant específico
+ * Obtiene todos los proveedores de un tenant específico (solo activos)
  */
 export const findAllProveedoresByTenant = async (tenantId: number) => {
   return db.proveedores.findMany({
-    where: { tenant_id: tenantId },
+    where: { 
+      tenant_id: tenantId,
+      isActive: true,
+    },
     orderBy: { nombre: 'asc' },
   });
 };
@@ -65,10 +68,13 @@ export const updateProveedorByIdAndTenant = async (
 };
 
 /**
- * Elimina un proveedor por id dentro de un tenant
+ * Desactiva un proveedor por id dentro de un tenant (borrado lógico)
  */
-export const deleteProveedorByIdAndTenant = async (tenantId: number, id: number) => {
+export const desactivarProveedorByIdAndTenant = async (tenantId: number, id: number) => {
   const existing = await db.proveedores.findFirst({ where: { id, tenant_id: tenantId } });
   if (!existing) return null;
-  return db.proveedores.delete({ where: { id } });
+  return db.proveedores.update({ 
+    where: { id }, 
+    data: { isActive: false } 
+  });
 };

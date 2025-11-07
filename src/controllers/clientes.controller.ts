@@ -99,9 +99,9 @@ export const updateClienteHandler = asyncHandler(
 );
 
 /**
- * Elimina un cliente por id
+ * Desactiva un cliente por id (borrado lógico)
  */
-export const deleteClienteHandler = asyncHandler(
+export const desactivarClienteHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
     const parsedId = IdParamSchema.safeParse({ id: req.params.id });
@@ -109,11 +109,11 @@ export const deleteClienteHandler = asyncHandler(
       res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
       return;
     }
-    const deleted = await clienteModel.deleteClienteByIdAndTenant(tenantId, parsedId.data.id);
+    const deleted = await clienteModel.desactivarClienteByIdAndTenant(tenantId, parsedId.data.id);
     if (!deleted) {
       res.status(404).json({ message: 'Cliente no encontrado.' });
       return;
     }
-    res.status(200).json({ message: 'Cliente eliminado.' });
+    res.status(200).json({ message: 'Cliente desactivado.' });
   }
 );

@@ -35,7 +35,7 @@ export const registerTenantHandler = asyncHandler(async (req: Request, res: Resp
             tx
         );
         const newAdmin = await usuarioModel.createUsuario(
-            { email, password_hash, rol: RolUsuario.admin, nombre: null },
+            { email, password_hash, rol: RolUsuario.admin, nombre: null, isActive: true },
             newTenant.id,
             tx
         );
@@ -72,6 +72,12 @@ export const loginHandler = asyncHandler(async (req: RequestWithTenant, res: Res
     
     if (!usuario || !(await bcrypt.compare(password, usuario.password_hash))) {
         res.status(401).json({ message: "Credenciales inválidas." });
+        return;
+    }
+
+    // Validación crítica: verificar que el usuario esté activo
+    if (!usuario.isActive) {
+        res.status(403).json({ message: "Usuario desactivado. Contacta al administrador." });
         return;
     }
 

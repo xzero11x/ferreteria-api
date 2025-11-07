@@ -107,9 +107,9 @@ export const updateProductoHandler = asyncHandler(
 );
 
 /**
- * Elimina un producto por id
+ * Desactiva un producto por id (borrado lógico)
  */
-export const deleteProductoHandler = asyncHandler(
+export const desactivarProductoHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
     const parsedId = IdParamSchema.safeParse({ id: req.params.id });
@@ -117,11 +117,11 @@ export const deleteProductoHandler = asyncHandler(
       res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
       return;
     }
-    const deleted = await productoModel.deleteProductoByIdAndTenant(tenantId, parsedId.data.id);
+    const deleted = await productoModel.desactivarProductoByIdAndTenant(tenantId, parsedId.data.id);
     if (!deleted) {
       res.status(404).json({ message: 'Producto no encontrado.' });
       return;
     }
-    res.status(200).json({ message: 'Producto eliminado.' });
+    res.status(200).json({ message: 'Producto desactivado.' });
   }
 );

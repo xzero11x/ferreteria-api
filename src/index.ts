@@ -11,6 +11,7 @@ import ventasRoutes from './routes/ventas.routes';
 import inventarioRoutes from './routes/inventario.routes';
 import ordenesCompraRoutes from './routes/ordenes-compra.routes';
 import tenantRoutes from './routes/tenant.routes';
+import usuariosRoutes from './routes/usuarios.routes';
 
 const app: Application = express();
 const PORT: number = parseInt(process.env.PORT || '3001');
@@ -70,6 +71,7 @@ app.use('/api/ventas', ventasRoutes);
 app.use('/api/inventario', inventarioRoutes);
 app.use('/api/compras', ordenesCompraRoutes);
 app.use('/api/tenant', tenantRoutes);
+app.use('/api/usuarios', usuariosRoutes);
 
 // Iniciar servidor
 try {

@@ -99,9 +99,9 @@ export const updateProveedorHandler = asyncHandler(
 );
 
 /**
- * Elimina un proveedor por id
+ * Desactiva un proveedor por id (borrado lógico)
  */
-export const deleteProveedorHandler = asyncHandler(
+export const desactivarProveedorHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
     const parsedId = IdParamSchema.safeParse({ id: req.params.id });
@@ -109,11 +109,11 @@ export const deleteProveedorHandler = asyncHandler(
       res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
       return;
     }
-    const deleted = await proveedorModel.deleteProveedorByIdAndTenant(tenantId, parsedId.data.id);
+    const deleted = await proveedorModel.desactivarProveedorByIdAndTenant(tenantId, parsedId.data.id);
     if (!deleted) {
       res.status(404).json({ message: 'Proveedor no encontrado.' });
       return;
     }
-    res.status(200).json({ message: 'Proveedor eliminado.' });
+    res.status(200).json({ message: 'Proveedor desactivado.' });
   }
 );
