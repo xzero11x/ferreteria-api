@@ -137,34 +137,3 @@ export const deleteInventarioAjusteByIdAndTenant = async (
   // Considerar implementar lógica de reversa si es necesario
   return db.inventarioAjustes.delete({ where: { id } });
 };
-
-/**
- * Obtiene el historial de ajustes de un producto específico (Kardex)
- */
-export const findKardexByProductoIdAndTenant = async (
-  tenantId: number,
-  productoId: number
-) => {
-  const producto = await db.productos.findFirst({
-    where: { id: productoId, tenant_id: tenantId },
-    select: { id: true, nombre: true, sku: true, stock: true },
-  });
-
-  if (!producto) return null;
-
-  const ajustes = await db.inventarioAjustes.findMany({
-    where: {
-      tenant_id: tenantId,
-      producto_id: productoId,
-    },
-    orderBy: { created_at: 'desc' },
-    include: {
-      usuario: { select: { id: true, nombre: true } },
-    },
-  });
-
-  return {
-    producto,
-    ajustes,
-  };
-};

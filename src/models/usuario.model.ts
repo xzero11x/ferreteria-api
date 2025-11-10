@@ -57,9 +57,10 @@ export const findUsuarioByEmailAndTenant = async (tenantId: number, email: strin
 export const createUsuario = async (
   data: Omit<Usuarios, 'id' | 'tenant_id'>, 
   tenantId: number,
-  tx: Prisma.TransactionClient
+  tx?: Prisma.TransactionClient
 ) => {
-  return tx.usuarios.create({
+  const prisma = tx ?? db;
+  return prisma.usuarios.create({
     data: {
       ...data,
       tenant_id: tenantId

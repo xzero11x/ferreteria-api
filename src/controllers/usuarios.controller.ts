@@ -64,8 +64,7 @@ export const createUsuarioHandler = asyncHandler(
           password_hash,
           isActive: true,
         },
-        tenantId,
-        null as any // Sin transacción externa, usamos db directamente
+        tenantId
       );
 
       res.status(201).json({

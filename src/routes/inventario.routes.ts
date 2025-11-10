@@ -6,7 +6,6 @@ import {
   getInventarioAjusteByIdHandler,
   createInventarioAjusteHandler,
   deleteInventarioAjusteHandler,
-  getKardexByProductoIdHandler,
 } from '../controllers/inventario.controller';
 
 const router = Router();
@@ -25,9 +24,5 @@ router.post('/ajustes', requireRoles(['admin']), createInventarioAjusteHandler);
 
 // DELETE: solo admin (eliminar ajustes - uso limitado)
 router.delete('/ajustes/:id', requireRoles(['admin']), deleteInventarioAjusteHandler);
-
-// Kardex (historial de producto)
-// GET: accesible para admin y empleado
-router.get('/kardex/:productoId', getKardexByProductoIdHandler);
 
 export default router;

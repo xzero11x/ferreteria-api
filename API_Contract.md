@@ -1288,36 +1288,6 @@ Authorization: Bearer <jwt_token>
 - **404 Not Found**: Producto no encontrado
 - **409 Conflict**: Stock insuficiente para salida
 
-### 16. Obtener Kardex de Producto
-
-**Endpoint**: `GET /api/inventario/kardex/:productoId`
-
-**Descripción**: Obtiene el historial completo de ajustes de un producto específico.
-
-**Acceso**: Privado (Requiere token JWT y subdominio)
-
-#### Respuesta Exitosa (200 OK)
-```json
-{
-  "producto": {
-    "id": 3,
-    "nombre": "Martillo",
-    "sku": "MAR-001",
-    "stock_actual": 100
-  },
-  "ajustes": [
-    {
-      "id": 1,
-      "tipo": "entrada",
-      "cantidad": 50,
-      "motivo": "Compra inicial",
-      "created_at": "2025-11-04T09:00:00.000Z",
-      "usuario": { "id": 1, "nombre": "Admin User" }
-    }
-  ]
-}
-```
-
 ---
 
 ## 🛒 Módulo: Órdenes de Compra (`/api/compras`)
@@ -1709,6 +1679,106 @@ Authorization: Bearer <token>
 - Las contraseñas se almacenan hasheadas con bcrypt
 - Los tokens JWT expiran en 24 horas
 
+---
+
+## 📊 Módulo: Reportes (`/api/reportes`)
+
+> **Nota**: Todos los endpoints de reportes requieren autenticación JWT y subdominio válido.
+
+### Obtener Kardex Completo de Producto
+
+**Endpoint**: `GET /api/reportes/kardex/:productoId`
+
+**Descripción**: Genera el Kardex completo de un producto, incluyendo **todos los movimientos de inventario**: ventas (salidas), compras recibidas (entradas) y ajustes manuales (entradas/salidas). Calcula el saldo acumulado en cada momento histórico.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/reportes/kardex/5`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "producto": {
+    "id": 5,
+    "nombre": "Martillo",
+    "sku": "MAR-001",
+    "stock": 95
+  },
+  "stockActual": 95,
+  "totalMovimientos": 8,
+  "movimientos": [
+    {
+      "fecha": "2025-11-01T10:00:00.000Z",
+      "tipo": "compra",
+      "cantidad": 100,
+      "referencia": "Compra #12 - Ferretería Global S.A.",
+      "precio_unitario": 15.50,
+      "saldo": 100
+    },
+    {
+      "fecha": "2025-11-02T14:30:00.000Z",
+      "tipo": "venta",
+      "cantidad": 5,
+      "referencia": "Venta #45 - Juan Pérez",
+      "precio_unitario": 25.00,
+      "saldo": 95
+    },
+    {
+      "fecha": "2025-11-03T09:15:00.000Z",
+      "tipo": "ajuste_salida",
+      "cantidad": 2,
+      "referencia": "Ajuste manual",
+      "motivo": "Producto dañado en almacén",
+      "responsable": "María García",
+      "saldo": 93
+    },
+    {
+      "fecha": "2025-11-04T16:00:00.000Z",
+      "tipo": "ajuste_entrada",
+      "cantidad": 2,
+      "referencia": "Ajuste manual",
+      "motivo": "Corrección de inventario físico",
+      "responsable": "Carlos López",
+      "saldo": 95
+    }
+  ]
+}
+```
+
+#### Tipos de Movimiento
+- **`venta`**: Salida por venta a cliente (incluye nombre del cliente y precio de venta)
+- **`compra`**: Entrada por recepción de orden de compra (incluye proveedor y costo)
+- **`ajuste_entrada`**: Entrada manual por ajuste de inventario (incluye motivo y responsable)
+- **`ajuste_salida`**: Salida manual por ajuste de inventario (incluye motivo y responsable)
+
+#### Campos del Movimiento
+- **`fecha`**: Fecha y hora del movimiento (ISO 8601)
+- **`tipo`**: Tipo de movimiento (venta | compra | ajuste_entrada | ajuste_salida)
+- **`cantidad`**: Cantidad de unidades del movimiento
+- **`referencia`**: Descripción del movimiento (ID y contexto)
+- **`precio_unitario`**: Precio o costo unitario (solo para ventas y compras)
+- **`motivo`**: Razón del ajuste (solo para ajustes manuales)
+- **`responsable`**: Usuario que realizó el ajuste (solo para ajustes manuales)
+- **`saldo`**: Stock acumulado después de este movimiento
+
+#### Respuestas de Error
+- **400 Bad Request**: ID de producto inválido
+- **401 Unauthorized**: Token inválido o expirado
+- **404 Not Found**: Producto no encontrado
+
+#### Notas Importantes
+- Solo se incluyen **compras recibidas** (estado `recibida`), las pendientes o canceladas no afectan el inventario
+- Los movimientos están ordenados **cronológicamente** del más antiguo al más reciente
+- El `saldo` permite auditar el stock en cualquier momento histórico
+- Este endpoint reemplaza el anterior `/api/inventario/kardex/:productoId` que solo mostraba ajustes manuales
+
+---
+
 ### 🗑️ Borrado Lógico (Soft Delete)
 
 Los siguientes módulos maestros implementan **borrado lógico** mediante el campo `isActive`:
@@ -1729,4 +1799,4 @@ Los siguientes módulos maestros implementan **borrado lógico** mediante el cam
 
 ---
 
-*Última actualización: 6 de Noviembre 2025 - Proyecto completo con borrado lógico implementado*
+*Última actualización: 9 de Noviembre 2025 - Módulo de Reportes con Kardex Completo implementado*
