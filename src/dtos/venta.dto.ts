@@ -4,7 +4,7 @@ import { z } from 'zod';
  * DTO para crear una nueva venta (POS)
  */
 export const CreateVentaSchema = z.object({
-  cliente_id: z.number().int().positive().optional(),
+  cliente_id: z.number().int().positive().nullable().optional(),
   metodo_pago: z.string().max(100).optional(),
   detalles: z.array(
     z.object({
