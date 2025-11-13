@@ -3,7 +3,45 @@ import { type Prisma } from '@prisma/client';
 import { type CreateClienteDTO, type UpdateClienteDTO } from '../dtos/cliente.dto';
 
 /**
+ * Obtiene clientes de un tenant con paginación y búsqueda (SERVER-SIDE)
+ */
+export const findClientesPaginados = async (
+  tenantId: number,
+  params: { skip: number; take: number; search?: string }
+) => {
+  const { skip, take, search } = params;
+
+  // Construir condición de búsqueda
+  const whereClause: Prisma.ClientesWhereInput = {
+    tenant_id: tenantId,
+    isActive: true,
+    ...(search && {
+      OR: [
+        { nombre: { contains: search } },
+        { documento_identidad: { contains: search } },
+        { email: { contains: search } },
+        { telefono: { contains: search } },
+      ],
+    }),
+  };
+
+  // Ejecutar dos consultas en transacción para obtener total y datos
+  const [total, data] = await db.$transaction([
+    db.clientes.count({ where: whereClause }),
+    db.clientes.findMany({
+      where: whereClause,
+      skip,
+      take,
+      orderBy: { nombre: 'asc' },
+    }),
+  ]);
+
+  return { total, data };
+};
+
+/**
  * Obtiene todos los clientes de un tenant específico (solo activos)
+ * @deprecated Usar findClientesPaginados para listas grandes
  */
 export const findAllClientesByTenant = async (tenantId: number) => {
   return db.clientes.findMany({

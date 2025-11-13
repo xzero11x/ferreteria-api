@@ -6,13 +6,38 @@ import { CreateProductoSchema, UpdateProductoSchema } from '../dtos/producto.dto
 import { IdParamSchema } from '../dtos/common.dto';
 
 /**
- * Obtiene todos los productos del tenant autenticado
+ * Obtiene todos los productos del tenant autenticado con paginación y búsqueda
  */
 export const getProductosHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const productos = await productoModel.findAllProductosByTenant(tenantId);
-    res.status(200).json(productos);
+    
+    // Extraer parámetros de paginación y búsqueda
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const search = (req.query.q as string) || '';
+    
+    // Validar límites razonables
+    const validLimit = Math.min(Math.max(limit, 1), 100); // Entre 1 y 100
+    const skip = (page - 1) * validLimit;
+    
+    // Obtener productos paginados
+    const { total, data } = await productoModel.findProductosPaginados(tenantId, {
+      skip,
+      take: validLimit,
+      search: search.trim() || undefined,
+    });
+    
+    // Devolver datos con metadatos de paginación
+    res.status(200).json({
+      data,
+      meta: {
+        total,
+        page,
+        limit: validLimit,
+        totalPages: Math.ceil(total / validLimit),
+      },
+    });
   }
 );
 

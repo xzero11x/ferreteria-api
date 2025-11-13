@@ -3,7 +3,51 @@ import { type Prisma } from '@prisma/client';
 import { type CreateProductoDTO, type UpdateProductoDTO } from '../dtos/producto.dto';
 
 /**
+ * Obtiene productos de un tenant con paginación y búsqueda (SERVER-SIDE)
+ */
+export const findProductosPaginados = async (
+  tenantId: number,
+  params: { skip: number; take: number; search?: string }
+) => {
+  const { skip, take, search } = params;
+
+  // Construir condición de búsqueda
+  const whereClause: Prisma.ProductosWhereInput = {
+    tenant_id: tenantId,
+    isActive: true,
+    ...(search && {
+      OR: [
+        { nombre: { contains: search } },
+        { sku: { contains: search } },
+        { descripcion: { contains: search } },
+      ],
+    }),
+  };
+
+  // Ejecutar dos consultas en transacción para obtener total y datos
+  const [total, data] = await db.$transaction([
+    db.productos.count({ where: whereClause }),
+    db.productos.findMany({
+      where: whereClause,
+      skip,
+      take,
+      orderBy: { id: 'desc' },
+      include: {
+        categoria: {
+          select: {
+            nombre: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  return { total, data };
+};
+
+/**
  * Obtiene todos los productos de un tenant específico (solo activos)
+ * @deprecated Usar findProductosPaginados para listas grandes
  */
 export const findAllProductosByTenant = async (tenantId: number) => {
   return db.productos.findMany({
