@@ -88,46 +88,116 @@ Esta es la documentación oficial de los endpoints del backend de la API de Ferr
 
 ---
 
+### 3. Verificar Tenant (Activación Manual - Desarrollo)
+
+**Endpoint**: `POST /api/auth/verify`
+
+**Descripción**: Activa manualmente un tenant registrado. Solo para uso en desarrollo (EMAIL_ENABLED=false).
+
+**Acceso**: Público (No requiere subdominio, no requiere token)
+
+**URL de Prueba**: `http://localhost:3001/api/auth/verify`
+
+#### Request Body
+```json
+{
+    "tenantId": 123
+}
+```
+
+**O alternativamente**:
+```json
+{
+    "subdominio": "central"
+}
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+    "message": "Tenant activado exitosamente."
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: Si falta tenantId o subdominio
+- **404 Not Found**: Si el tenant no existe
+- **409 Conflict**: Si el tenant ya está activo
+
+**Nota**: Este endpoint solo se usa en desarrollo. En producción con EMAIL_ENABLED=true se usaría activación por token de email.
+
+---
+
 ## 📦 Módulo: Productos (`/api/productos`)
 
 > **Nota**: Todos los endpoints de productos requieren autenticación JWT y subdominio válido.
 
-### 3. Obtener Todos los Productos
+### 3. Obtener Todos los Productos (con Paginación y Búsqueda)
 
 **Endpoint**: `GET /api/productos`
 
-**Descripción**: Obtiene la lista de todos los productos del tenant autenticado.
+**Descripción**: Obtiene la lista paginada de productos del tenant autenticado con capacidad de búsqueda.
 
 **Acceso**: Privado (Requiere token JWT y subdominio)
 
-**URL de Prueba**: `http://[subdominio].localhost:3001/api/productos`
+**Estrategia**: **Server-Side Pagination** (para manejar miles de productos)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/productos?page=1&limit=10&q=martillo`
 
 **Headers Requeridos**:
 ```
 Authorization: Bearer <jwt_token>
 ```
 
+**Query Parameters** (opcionales):
+- `page`: Número de página (default: 1)
+- `limit`: Cantidad de registros por página (default: 10, máx: 100)
+- `q`: Búsqueda por nombre, SKU o descripción
+
+#### Ejemplos de Uso
+```
+GET /api/productos?page=1&limit=10              # Primera página, 10 productos
+GET /api/productos?page=2&limit=20              # Segunda página, 20 productos
+GET /api/productos?q=martillo                   # Buscar "martillo" en todos los campos
+GET /api/productos?page=1&limit=10&q=tornillo   # Búsqueda paginada
+```
+
 #### Respuesta Exitosa (200 OK)
 ```json
-[
+{
+  "data": [
     {
-        "id": 1,
-        "nombre": "Martillo",
-        "sku": "MAR001",
-        "descripcion": "Martillo de acero 500g",
-        "precio_venta": "25.50",
-        "costo_compra": "15.00",
-        "stock": 50,
-        "stock_minimo": 5,
-        "tenant_id": 1,
-        "categoria_id": 2,
-        "categoria": {
-            "id": 2,
-            "nombre": "Herramientas"
-        }
+      "id": 1,
+      "nombre": "Martillo",
+      "sku": "MAR001",
+      "descripcion": "Martillo de acero 500g",
+      "precio_venta": "25.50",
+      "costo_compra": "15.00",
+      "stock": 50,
+      "stock_minimo": 5,
+      "tenant_id": 1,
+      "categoria_id": 2,
+      "categoria": {
+        "id": 2,
+        "nombre": "Herramientas"
+      }
     }
-]
+  ],
+  "meta": {
+    "total": 250,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 25
+  }
+}
 ```
+
+#### Estructura de la Respuesta
+- **`data`**: Array de productos de la página actual
+- **`meta.total`**: Total de productos que coinciden con la búsqueda/filtros
+- **`meta.page`**: Página actual
+- **`meta.limit`**: Registros por página
+- **`meta.totalPages`**: Total de páginas disponibles
 
 #### Respuestas de Error
 - **401 Unauthorized**: Token inválido o expirado
@@ -248,7 +318,9 @@ Authorization: Bearer <jwt_token>
 
 **Descripción**: Actualiza los datos de un producto existente.
 
-**Acceso**: Privado (Requiere token JWT, rol admin o empleado)
+**Acceso**: Privado (Requiere token JWT y rol admin únicamente)
+
+**Roles Permitidos**: `admin`
 
 **URL de Prueba**: `http://[subdominio].localhost:3001/api/productos/1`
 
@@ -291,7 +363,7 @@ Content-Type: application/json
 #### Respuestas de Error
 - **400 Bad Request**: ID inválido o datos inválidos
 - **401 Unauthorized**: Token inválido o expirado
-- **403 Forbidden**: Usuario sin permisos suficientes
+- **403 Forbidden**: Usuario sin permisos (no es admin)
 - **404 Not Found**: Producto no encontrado
 - **409 Conflict**: SKU duplicado en el tenant
 
@@ -301,9 +373,11 @@ Content-Type: application/json
 
 **Endpoint**: `PATCH /api/productos/:id/desactivar`
 
-**Descripción**: Desactiva un producto (borrado lógico). El producto ya no aparecerá en listados pero se mantiene en la base de datos.
+**Descripción**: Desactiva un producto (borrado lógico). El producto ya no aparecerá en listados pero se mantiene en la base de datos para integridad referencial.
 
 **Acceso**: Privado (Requiere token JWT y rol admin únicamente)
+
+**Roles Permitidos**: `admin`
 
 **URL de Prueba**: `http://[subdominio].localhost:3001/api/productos/1/desactivar`
 
@@ -324,6 +398,8 @@ Authorization: Bearer <jwt_token>
 - **401 Unauthorized**: Token inválido o expirado
 - **403 Forbidden**: Usuario no es admin
 - **404 Not Found**: Producto no encontrado
+
+**Nota**: Los productos desactivados (`isActive: false`) no aparecen en los listados GET pero se mantienen en la base de datos. No se puede desactivar un producto que tiene movimientos pendientes.
 
 ---
 
@@ -432,7 +508,9 @@ Authorization: Bearer <jwt_token>
 
 **Descripción**: Actualiza los datos de una categoría existente.
 
-**Acceso**: Privado (Requiere token JWT, rol admin o empleado)
+**Acceso**: Privado (Requiere token JWT y rol admin únicamente)
+
+**Roles Permitidos**: `admin`
 
 **URL de Prueba**: `http://[subdominio].localhost:3001/api/categorias/1`
 
@@ -463,7 +541,7 @@ Content-Type: application/json
 #### Respuestas de Error
 - **400 Bad Request**: ID inválido o datos inválidos
 - **401 Unauthorized**: Token inválido o expirado
-- **403 Forbidden**: Usuario sin permisos suficientes
+- **403 Forbidden**: Usuario sin permisos (no es admin)
 - **404 Not Found**: Categoría no encontrada
 - **409 Conflict**: Nombre duplicado en el tenant
 
@@ -473,9 +551,11 @@ Content-Type: application/json
 
 **Endpoint**: `PATCH /api/categorias/:id/desactivar`
 
-**Descripción**: Desactiva una categoría (borrado lógico). La categoría ya no aparecerá en listados pero se mantiene en la base de datos.
+**Descripción**: Desactiva una categoría (borrado lógico). La categoría ya no aparecerá en listados pero se mantiene en la base de datos para integridad referencial.
 
 **Acceso**: Privado (Requiere token JWT y rol admin únicamente)
+
+**Roles Permitidos**: `admin`
 
 **URL de Prueba**: `http://[subdominio].localhost:3001/api/categorias/1/desactivar`
 
@@ -497,37 +577,63 @@ Authorization: Bearer <jwt_token>
 - **403 Forbidden**: Usuario no es admin
 - **404 Not Found**: Categoría no encontrada
 
+**Nota**: Las categorías desactivadas (`isActive: false`) no aparecen en los listados GET pero se mantienen en la base de datos. No se puede desactivar una categoría que tiene productos activos asociados.
+
 ---
 
 ## 👥 Módulo: Clientes (`/api/clientes`)
 
 > **Nota**: Todos los endpoints de clientes requieren autenticación JWT y subdominio válido.
 
-### 7. Obtener Todos los Clientes
+### 7. Obtener Todos los Clientes (con Paginación y Búsqueda)
 
 **Endpoint**: `GET /api/clientes`
 
-**Descripción**: Lista todos los clientes del tenant autenticado.
+**Descripción**: Lista paginada de clientes del tenant autenticado con capacidad de búsqueda.
 
 **Acceso**: Privado (Requiere token JWT y subdominio)
 
-**URL de Prueba**: `http://[subdominio].localhost:3001/api/clientes`
+**Estrategia**: **Server-Side Pagination** (para manejar miles de clientes)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/clientes?page=1&limit=10&q=juan`
 
 **Headers Requeridos**:
 ```
 Authorization: Bearer <jwt_token>
 ```
 
+**Query Parameters** (opcionales):
+- `page`: Número de página (default: 1)
+- `limit`: Cantidad de registros por página (default: 10, máx: 100)
+- `q`: Búsqueda por nombre, documento, email o teléfono
+
+#### Ejemplos de Uso
+```
+GET /api/clientes?page=1&limit=10           # Primera página, 10 clientes
+GET /api/clientes?q=Juan                     # Buscar "Juan" en todos los campos
+GET /api/clientes?page=2&limit=20&q=DNI     # Búsqueda paginada por documento
+```
+
 #### Respuesta Exitosa (200 OK)
 ```json
-[
-  {
-    "id": 1,
-    "nombre": "Juan Pérez",
-    "documento_identidad": "DNI123",
-    "email": "juan@example.com"
+{
+  "data": [
+    {
+      "id": 1,
+      "nombre": "Juan Pérez",
+      "documento_identidad": "DNI123",
+      "email": "juan@example.com",
+      "telefono": "555-1234",
+      "direccion": "Calle Principal 123"
+    }
+  ],
+  "meta": {
+    "total": 500,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 50
   }
-]
+}
 ```
 
 #### Respuestas de Error
@@ -891,15 +997,17 @@ Authorization: Bearer <jwt_token>
 
 > **Nota**: Todos los endpoints de ventas requieren autenticación JWT y subdominio válido.
 
-### 11. Obtener Todas las Ventas
+### 11. Obtener Todas las Ventas (con Paginación y Búsqueda)
 
 **Endpoint**: `GET /api/ventas`
 
-**Descripción**: Lista todas las ventas del tenant con filtros opcionales.
+**Descripción**: Lista paginada de ventas del tenant con capacidad de búsqueda y filtros.
 
 **Acceso**: Privado (Requiere token JWT y subdominio)
 
-**URL de Prueba**: `http://[subdominio].localhost:3001/api/ventas`
+**Estrategia**: **Server-Side Pagination** (para manejar miles de transacciones)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/ventas?page=1&limit=10&q=juan`
 
 **Headers Requeridos**:
 ```
@@ -907,22 +1015,41 @@ Authorization: Bearer <jwt_token>
 ```
 
 **Query Parameters** (opcionales):
+- `page`: Número de página (default: 1)
+- `limit`: Cantidad de registros por página (default: 10, máx: 100)
+- `q`: Búsqueda por nombre de cliente o método de pago
 - `cliente_id`: Filtrar por ID de cliente
 - `fecha_inicio`: Filtrar desde fecha (ISO 8601)
 - `fecha_fin`: Filtrar hasta fecha (ISO 8601)
 
+#### Ejemplos de Uso
+```
+GET /api/ventas?page=1&limit=10                               # Primera página
+GET /api/ventas?q=Juan                                         # Buscar por cliente
+GET /api/ventas?cliente_id=5&page=1&limit=20                  # Ventas de un cliente
+GET /api/ventas?fecha_inicio=2025-11-01&fecha_fin=2025-11-30  # Rango de fechas
+```
+
 #### Respuesta Exitosa (200 OK)
 ```json
-[
-  {
-    "id": 1,
-    "total": 150.50,
-    "metodo_pago": "efectivo",
-    "created_at": "2025-11-04T10:30:00.000Z",
-    "cliente": { "id": 5, "nombre": "Juan Pérez" },
-    "usuario": { "id": 1, "nombre": "Admin User" }
+{
+  "data": [
+    {
+      "id": 1,
+      "total": 150.50,
+      "metodo_pago": "efectivo",
+      "created_at": "2025-11-04T10:30:00.000Z",
+      "cliente": { "id": 5, "nombre": "Juan Pérez" },
+      "usuario": { "id": 1, "nombre": "Admin User" }
+    }
+  ],
+  "meta": {
+    "total": 1250,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 125
   }
-]
+}
 ```
 
 ### 12. Obtener Detalle de Venta
@@ -996,6 +1123,86 @@ Authorization: Bearer <jwt_token>
 - **400 Bad Request**: Datos inválidos
 - **404 Not Found**: Producto no encontrado
 - **409 Conflict**: Stock insuficiente
+
+---
+
+### 13.1. Actualizar Venta
+
+**Endpoint**: `PUT /api/ventas/:id`
+
+**Descripción**: Actualiza los datos de una venta existente. Solo para correcciones administrativas.
+
+**Acceso**: Privado (Requiere rol `admin` únicamente)
+
+**Roles Permitidos**: `admin`
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/ventas/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+#### Request Body
+```json
+{
+  "metodo_pago": "tarjeta",
+  "observaciones": "Corrección de método de pago"
+}
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "id": 1,
+  "total": 100.50,
+  "metodo_pago": "tarjeta",
+  "observaciones": "Corrección de método de pago",
+  "updated_at": "2025-11-04T15:00:00.000Z"
+}
+```
+
+#### Respuestas de Error
+- **401 Unauthorized**: Token inválido
+- **403 Forbidden**: Usuario no es admin
+- **404 Not Found**: Venta no encontrada
+
+**Nota**: La actualización de ventas es limitada. No se permite modificar productos ni cantidades para mantener la integridad del inventario.
+
+---
+
+### 13.2. Eliminar Venta
+
+**Endpoint**: `DELETE /api/ventas/:id`
+
+**Descripción**: Elimina una venta y restaura el stock. Solo para casos excepcionales.
+
+**Acceso**: Privado (Requiere rol `admin` únicamente)
+
+**Roles Permitidos**: `admin`
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/ventas/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "message": "Venta eliminada exitosamente. Stock restaurado."
+}
+```
+
+#### Respuestas de Error
+- **401 Unauthorized**: Token inválido
+- **403 Forbidden**: Usuario no es admin
+- **404 Not Found**: Venta no encontrada
+- **409 Conflict**: No se puede eliminar venta con más de 24 horas
+
+**Advertencia**: Este endpoint debe usarse con extrema precaución ya que elimina permanentemente el registro de venta y afecta el inventario.
 
 ---
 
@@ -1218,38 +1425,67 @@ Authorization: Bearer <jwt_token>
 
 > **Nota**: Todos los endpoints de inventario requieren autenticación JWT y subdominio válido.
 
-### 14. Obtener Ajustes de Inventario
+### 14. Obtener Ajustes de Inventario (con Paginación y Búsqueda)
 
 **Endpoint**: `GET /api/inventario/ajustes`
 
-**Descripción**: Lista todos los ajustes de inventario del tenant con filtros opcionales.
+**Descripción**: Lista paginada de ajustes de inventario del tenant con búsqueda y filtros.
 
 **Acceso**: Privado (Requiere token JWT y subdominio)
 
+**Estrategia**: **Server-Side Pagination** (para manejar histórico extenso de movimientos)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/inventario/ajustes?page=1&limit=10&q=martillo`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
 **Query Parameters** (opcionales):
+- `page`: Número de página (default: 1)
+- `limit`: Cantidad de registros por página (default: 10, máx: 100)
+- `q`: Búsqueda por nombre de producto, SKU o motivo del ajuste
 - `producto_id`: Filtrar por ID de producto
 - `tipo`: Filtrar por tipo (`entrada` o `salida`)
 - `fecha_inicio`: Filtrar desde fecha (ISO 8601)
 - `fecha_fin`: Filtrar hasta fecha (ISO 8601)
 
+#### Ejemplos de Uso
+```
+GET /api/inventario/ajustes?page=1&limit=10              # Primera página
+GET /api/inventario/ajustes?q=Martillo                   # Buscar por producto
+GET /api/inventario/ajustes?tipo=entrada&page=1          # Solo entradas
+GET /api/inventario/ajustes?producto_id=3                # Ajustes de un producto
+GET /api/inventario/ajustes?fecha_inicio=2025-11-01      # Desde una fecha
+```
+
 #### Respuesta Exitosa (200 OK)
 ```json
-[
-  {
-    "id": 1,
-    "tipo": "entrada",
-    "cantidad": 50,
-    "motivo": "Compra inicial de inventario",
-    "created_at": "2025-11-04T09:00:00.000Z",
-    "producto": {
-      "id": 3,
-      "nombre": "Martillo",
-      "sku": "MAR-001",
-      "stock_actual": 100
-    },
-    "usuario": { "id": 1, "nombre": "Admin User" }
+{
+  "data": [
+    {
+      "id": 1,
+      "tipo": "entrada",
+      "cantidad": 50,
+      "motivo": "Compra inicial de inventario",
+      "created_at": "2025-11-04T09:00:00.000Z",
+      "producto": {
+        "id": 3,
+        "nombre": "Martillo",
+        "sku": "MAR-001",
+        "stock_actual": 100
+      },
+      "usuario": { "id": 1, "nombre": "Admin User" }
+    }
+  ],
+  "meta": {
+    "total": 850,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 85
   }
-]
+}
 ```
 
 ### 15. Crear Ajuste de Inventario
@@ -1287,6 +1523,84 @@ Authorization: Bearer <jwt_token>
 #### Respuestas de Error
 - **404 Not Found**: Producto no encontrado
 - **409 Conflict**: Stock insuficiente para salida
+
+---
+
+### 15.1. Obtener Ajuste de Inventario por ID
+
+**Endpoint**: `GET /api/inventario/ajustes/:id`
+
+**Descripción**: Obtiene el detalle de un ajuste de inventario específico.
+
+**Acceso**: Privado (Requiere token JWT y subdominio)
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/inventario/ajustes/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "id": 1,
+  "tipo": "entrada",
+  "cantidad": 50,
+  "motivo": "Ajuste por inventario físico",
+  "created_at": "2025-11-04T09:00:00.000Z",
+  "producto": {
+    "id": 3,
+    "nombre": "Martillo",
+    "sku": "MAR-001",
+    "stock_actual": 150
+  },
+  "usuario": {
+    "id": 1,
+    "nombre": "Admin User",
+    "email": "admin@empresa.com"
+  }
+}
+```
+
+#### Respuestas de Error
+- **400 Bad Request**: ID inválido
+- **401 Unauthorized**: Token inválido
+- **404 Not Found**: Ajuste no encontrado
+
+---
+
+### 15.2. Eliminar Ajuste de Inventario
+
+**Endpoint**: `DELETE /api/inventario/ajustes/:id`
+
+**Descripción**: Elimina un ajuste de inventario y revierte el cambio en el stock. Solo para correcciones administrativas.
+
+**Acceso**: Privado (Requiere rol `admin` únicamente)
+
+**Roles Permitidos**: `admin`
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/inventario/ajustes/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "message": "Ajuste eliminado exitosamente. Stock revertido."
+}
+```
+
+#### Respuestas de Error
+- **401 Unauthorized**: Token inválido
+- **403 Forbidden**: Usuario no es admin
+- **404 Not Found**: Ajuste no encontrado
+- **409 Conflict**: No se puede eliminar ajuste con más de 7 días
+
+**Advertencia**: Este endpoint elimina permanentemente el ajuste y afecta el stock del producto.
 
 ---
 
@@ -1452,6 +1766,93 @@ Authorization: Bearer <jwt_token>
 
 ---
 
+### 21.1. Actualizar Orden de Compra
+
+**Endpoint**: `PUT /api/compras/:id`
+
+**Descripción**: Actualiza los datos de una orden de compra pendiente.
+
+**Acceso**: Privado (Requiere rol `admin` únicamente)
+
+**Roles Permitidos**: `admin`
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/compras/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+#### Request Body
+```json
+{
+  "proveedor_id": 3,
+  "detalles": [
+    {
+      "producto_id": 5,
+      "cantidad": 200,
+      "costo_unitario": 4.50
+    }
+  ]
+}
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "id": 1,
+  "total": 900.00,
+  "estado": "pendiente",
+  "proveedor_id": 3,
+  "updated_at": "2025-11-04T16:00:00.000Z"
+}
+```
+
+#### Respuestas de Error
+- **401 Unauthorized**: Token inválido
+- **403 Forbidden**: Usuario no es admin
+- **404 Not Found**: Orden no encontrada
+- **409 Conflict**: Solo se pueden actualizar órdenes pendientes
+
+**Nota**: Solo se pueden actualizar órdenes con estado `pendiente`. Las órdenes recibidas o canceladas no se pueden modificar.
+
+---
+
+### 21.2. Eliminar Orden de Compra
+
+**Endpoint**: `DELETE /api/compras/:id`
+
+**Descripción**: Elimina una orden de compra pendiente. Solo para correcciones administrativas.
+
+**Acceso**: Privado (Requiere rol `admin` únicamente)
+
+**Roles Permitidos**: `admin`
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/compras/1`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "message": "Orden de compra eliminada exitosamente."
+}
+```
+
+#### Respuestas de Error
+- **401 Unauthorized**: Token inválido
+- **403 Forbidden**: Usuario no es admin
+- **404 Not Found**: Orden no encontrada
+- **409 Conflict**: Solo se pueden eliminar órdenes pendientes
+
+**Advertencia**: Solo se pueden eliminar órdenes con estado `pendiente`. Las órdenes recibidas no se pueden eliminar para mantener el historial de compras.
+
+---
+
 ## 📋 Módulo: Pedidos y Reservas (`/api/pedidos`)
 
 > **Nota**: Todos los endpoints de pedidos requieren autenticación JWT y subdominio válido.
@@ -1497,6 +1898,51 @@ Authorization: Bearer <jwt_token>
   "mensaje": "Su pedido está listo para recoger"
 }
 ```
+
+---
+
+### 23.1. Cancelar Pedido
+
+**Endpoint**: `POST /api/pedidos/:id/cancelar`
+
+**Descripción**: Cancela un pedido pendiente o confirmado. Restaura las cantidades reservadas al stock disponible.
+
+**Acceso**: Privado (Requiere rol `admin` o `empleado`)
+
+**Roles Permitidos**: `admin`, `empleado`
+
+**URL de Prueba**: `http://[subdominio].localhost:3001/api/pedidos/5/cancelar`
+
+**Headers Requeridos**:
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+#### Request Body (opcional)
+```json
+{
+  "motivo": "Cliente solicitó cancelación"
+}
+```
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "id": 5,
+  "estado": "cancelado",
+  "fecha_cancelacion": "2025-11-04T14:30:00.000Z",
+  "message": "Pedido cancelado exitosamente. Stock restaurado."
+}
+```
+
+#### Respuestas de Error
+- **401 Unauthorized**: Token inválido
+- **403 Forbidden**: Usuario sin permisos
+- **404 Not Found**: Pedido no encontrado
+- **409 Conflict**: Solo se pueden cancelar pedidos pendientes o confirmados (no entregados)
+
+**Nota**: La cancelación restaura automáticamente las cantidades reservadas del pedido al stock disponible.
 
 ### 24. Generar Venta desde Pedido
 
@@ -1579,6 +2025,58 @@ Authorization: Bearer <jwt_token>
 
 ## 📊 Resumen de Implementación
 
+### ⚡ Estrategia Híbrida de Paginación
+
+Este API implementa una **estrategia híbrida** de paginación optimizada según el tipo de datos:
+
+#### 🔄 **Grupo A: Server-Side Pagination** (Carga Masiva)
+Módulos que crecen indefinidamente y requieren paginación en el servidor:
+
+- **Productos** (`GET /api/productos`)
+  - Crecimiento: Miles de productos
+  - Búsqueda: Por nombre, SKU, descripción
+  - Parámetros: `?page=1&limit=10&q=martillo`
+
+- **Clientes** (`GET /api/clientes`)
+  - Crecimiento: Miles de clientes
+  - Búsqueda: Por nombre, documento, email, teléfono
+  - Parámetros: `?page=1&limit=10&q=juan`
+
+- **Ventas** (`GET /api/ventas`)
+  - Crecimiento: Millones de transacciones
+  - Búsqueda: Por cliente, método de pago
+  - Filtros: `cliente_id`, `fecha_inicio`, `fecha_fin`
+  - Parámetros: `?page=1&limit=10&q=juan&fecha_inicio=2025-11-01`
+
+- **Inventario - Ajustes** (`GET /api/inventario/ajustes`)
+  - Crecimiento: Histórico extenso de movimientos
+  - Búsqueda: Por producto, SKU, motivo
+  - Filtros: `producto_id`, `tipo`, `fecha_inicio`, `fecha_fin`
+  - Parámetros: `?page=1&limit=10&q=martillo&tipo=entrada`
+
+**Características:**
+- ✅ Respuesta con estructura `{ data: [], meta: { total, page, limit, totalPages } }`
+- ✅ Límite máximo: 100 registros por página
+- ✅ Búsqueda en tiempo real por query string `?q=...`
+- ✅ El frontend debe manejar la paginación en la UI
+
+#### 📦 **Grupo B: Client-Side Pagination** (Carga Completa)
+Módulos con listas finitas y cortas que cargan todos los datos de una vez:
+
+- **Usuarios** (`GET /api/usuarios`) - Raramente >50 empleados
+- **Categorías** (`GET /api/categorias`) - Raramente >100 categorías
+- **Proveedores** (`GET /api/proveedores`) - V1: Carga completa (para V2 evaluar paginación)
+- **Órdenes de Compra** (`GET /api/compras`) - V1: Carga completa
+- **Pedidos** (`GET /api/pedidos`) - V1: Carga completa
+
+**Características:**
+- ✅ Respuesta directa con array `[...]`
+- ✅ El frontend puede implementar búsqueda/paginación instantánea en memoria
+- ✅ Latencia cero para búsquedas (no requiere llamadas al servidor)
+- ✅ Ideal para listas <500 registros
+
+---
+
 ### Estado de Módulos
 
 **✅ Nivel 1: Fundación (100% Completo)**
@@ -1588,35 +2086,39 @@ Authorization: Bearer <jwt_token>
 - Activación manual de tenants (desarrollo)
 
 **✅ Nivel 2: Módulos Maestros (100% Completo)**
-- Productos (CRUD completo con roles)
-- Categorías (CRUD completo con roles)
-- Clientes (CRUD completo)
-- Proveedores (CRUD completo)
+- Productos (CRUD completo con roles + borrado lógico + **paginación server-side**)
+- Categorías (CRUD completo con roles + borrado lógico)
+- Clientes (CRUD completo + borrado lógico + **paginación server-side**)
+- Proveedores (CRUD completo + borrado lógico)
+- Usuarios (CRUD completo + borrado lógico) - Solo admin
 
 **✅ Nivel 3: Módulos Transaccionales (100% Completo)**
-- Pedidos y Reservas (con generar venta)
-- Ventas (POS) (con descuento automático de stock)
-- Ajustes de Inventario (con kardex)
-- Órdenes de Compra (con recepción de mercadería)
+- Pedidos y Reservas (listar, confirmar, cancelar, generar venta)
+- Ventas (POS) (CRUD completo con descuento automático de stock + **paginación server-side**)
+- Ajustes de Inventario (CRUD completo con kardex + **paginación server-side**)
+- Órdenes de Compra (CRUD completo con recepción de mercadería)
 
-**✅ Configuración (100% Completo)**
+**✅ Reportes y Configuración (100% Completo)**
+- Kardex completo de productos (con todos los movimientos)
 - Configuración de tenant (branding y parámetros)
 - .env.example documentado
 - Healthcheck
 
 ### Total de Endpoints Implementados
 
-**~50+ endpoints funcionales** distribuidos en:
-- Autenticación: 3 endpoints
-- Productos: 5 endpoints
-- Categorías: 5 endpoints
-- Clientes: 5 endpoints
-- Proveedores: 5 endpoints
-- Ventas (POS): 5 endpoints
-- Inventario: 5 endpoints
-- Órdenes de Compra: 7 endpoints
-- Pedidos/Reservas: 5 endpoints
-- Configuración Tenant: 2 endpoints
+**~60+ endpoints funcionales** distribuidos en:
+- Autenticación: 3 endpoints (register, login, verify)
+- Productos: 5 endpoints (GET list, GET id, POST, PUT, PATCH desactivar)
+- Categorías: 5 endpoints (GET list, GET id, POST, PUT, PATCH desactivar)
+- Clientes: 5 endpoints (GET list, GET id, POST, PUT, PATCH desactivar)
+- Proveedores: 5 endpoints (GET list, GET id, POST, PUT, PATCH desactivar)
+- Usuarios: 5 endpoints (GET list, GET id, POST, PUT, PATCH desactivar)
+- Ventas (POS): 5 endpoints (GET list, GET id, POST, PUT, DELETE)
+- Inventario: 5 endpoints (GET ajustes, GET ajuste id, POST, DELETE)
+- Órdenes de Compra: 7 endpoints (GET list, GET id, POST, PUT, DELETE, POST recibir, POST cancelar)
+- Pedidos/Reservas: 5 endpoints (GET list, GET id, POST confirmar, POST cancelar, POST generar-venta)
+- Configuración Tenant: 2 endpoints (GET, PUT)
+- Reportes: 1 endpoint (Kardex completo)
 - Healthcheck: 1 endpoint
 
 
@@ -1799,4 +2301,4 @@ Los siguientes módulos maestros implementan **borrado lógico** mediante el cam
 
 ---
 
-*Última actualización: 9 de Noviembre 2025 - Módulo de Reportes con Kardex Completo implementado*
+*Última actualización: 12 de Noviembre 2025 - Implementada estrategia híbrida de paginación (Server-Side para Productos, Clientes, Ventas, Inventario) - 60+ endpoints*

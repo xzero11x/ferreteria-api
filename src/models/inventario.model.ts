@@ -1,9 +1,61 @@
 import { db } from '../config/db';
-import { TipoAjuste } from '@prisma/client';
+import { TipoAjuste, Prisma } from '@prisma/client';
 import { type CreateInventarioAjusteDTO } from '../dtos/inventario.dto';
 
 /**
+ * Obtiene ajustes de inventario con paginación, búsqueda y filtros (SERVER-SIDE)
+ */
+export const findInventarioAjustesPaginados = async (
+  tenantId: number,
+  params: {
+    skip: number;
+    take: number;
+    search?: string;
+    producto_id?: number;
+    tipo?: TipoAjuste;
+    fecha_inicio?: Date;
+    fecha_fin?: Date;
+  }
+) => {
+  const { skip, take, search, producto_id, tipo, fecha_inicio, fecha_fin } = params;
+
+  // Construir condición de búsqueda
+  const whereClause: Prisma.InventarioAjustesWhereInput = {
+    tenant_id: tenantId,
+    ...(producto_id && { producto_id }),
+    ...(tipo && { tipo }),
+    ...(fecha_inicio && { created_at: { gte: fecha_inicio } }),
+    ...(fecha_fin && { created_at: { lte: fecha_fin } }),
+    ...(search && {
+      OR: [
+        { producto: { nombre: { contains: search } } },
+        { producto: { sku: { contains: search } } },
+        { motivo: { contains: search } },
+      ],
+    }),
+  };
+
+  // Ejecutar dos consultas en transacción
+  const [total, data] = await db.$transaction([
+    db.inventarioAjustes.count({ where: whereClause }),
+    db.inventarioAjustes.findMany({
+      where: whereClause,
+      skip,
+      take,
+      orderBy: { id: 'desc' },
+      include: {
+        producto: { select: { id: true, nombre: true, sku: true, stock: true } },
+        usuario: { select: { id: true, nombre: true, email: true } },
+      },
+    }),
+  ]);
+
+  return { total, data };
+};
+
+/**
  * Obtiene todos los ajustes de inventario de un tenant con filtros opcionales
+ * @deprecated Usar findInventarioAjustesPaginados para listas grandes
  */
 export const findAllInventarioAjustesByTenant = async (
   tenantId: number,

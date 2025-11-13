@@ -6,7 +6,7 @@ import { CreateVentaSchema, ListVentasQuerySchema, UpdateVentaSchema } from '../
 import * as ventaModel from '../models/venta.model';
 
 /**
- * GET /api/ventas — Lista todas las ventas del tenant (con filtros opcionales)
+ * GET /api/ventas — Lista todas las ventas del tenant con paginación, búsqueda y filtros
  */
 export const getVentasHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
@@ -17,13 +17,26 @@ export const getVentasHandler = asyncHandler(
       return;
     }
 
+    // Parámetros de paginación
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const search = (req.query.q as string) || '';
+    
+    // Validar límites razonables
+    const validLimit = Math.min(Math.max(limit, 1), 100);
+    const skip = (page - 1) * validLimit;
+
+    // Filtros adicionales
     const filters = {
+      skip,
+      take: validLimit,
+      search: search.trim() || undefined,
       cliente_id: parseQuery.data.cliente_id,
       fecha_inicio: parseQuery.data.fecha_inicio ? new Date(parseQuery.data.fecha_inicio) : undefined,
       fecha_fin: parseQuery.data.fecha_fin ? new Date(parseQuery.data.fecha_fin) : undefined,
     };
 
-    const ventas = await ventaModel.findAllVentasByTenant(tenantId, filters);
+    const { total, data: ventas } = await ventaModel.findVentasPaginadas(tenantId, filters);
 
     const result = ventas.map((v) => ({
       id: v.id,
@@ -34,7 +47,15 @@ export const getVentasHandler = asyncHandler(
       usuario: v.usuario ? { id: v.usuario.id, nombre: v.usuario.nombre } : null,
     }));
 
-    res.status(200).json(result);
+    res.status(200).json({
+      data: result,
+      meta: {
+        total,
+        page,
+        limit: validLimit,
+        totalPages: Math.ceil(total / validLimit),
+      },
+    });
   }
 );
 

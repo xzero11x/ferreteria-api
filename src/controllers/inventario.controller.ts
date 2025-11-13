@@ -10,7 +10,7 @@ import * as inventarioModel from '../models/inventario.model';
 import { TipoAjuste } from '@prisma/client';
 
 /**
- * GET /api/inventario/ajustes — Lista todos los ajustes de inventario del tenant (con filtros opcionales)
+ * GET /api/inventario/ajustes — Lista ajustes de inventario con paginación, búsqueda y filtros
  */
 export const getInventarioAjustesHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
@@ -21,14 +21,26 @@ export const getInventarioAjustesHandler = asyncHandler(
       return;
     }
 
+    // Parámetros de paginación
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const search = (req.query.q as string) || '';
+    
+    // Validar límites razonables
+    const validLimit = Math.min(Math.max(limit, 1), 100);
+    const skip = (page - 1) * validLimit;
+
     const filters = {
+      skip,
+      take: validLimit,
+      search: search.trim() || undefined,
       producto_id: parseQuery.data.producto_id,
       tipo: parseQuery.data.tipo as TipoAjuste | undefined,
       fecha_inicio: parseQuery.data.fecha_inicio ? new Date(parseQuery.data.fecha_inicio) : undefined,
       fecha_fin: parseQuery.data.fecha_fin ? new Date(parseQuery.data.fecha_fin) : undefined,
     };
 
-    const ajustes = await inventarioModel.findAllInventarioAjustesByTenant(tenantId, filters);
+    const { total, data: ajustes } = await inventarioModel.findInventarioAjustesPaginados(tenantId, filters);
 
     const result = ajustes.map((a) => ({
       id: a.id,
@@ -49,7 +61,15 @@ export const getInventarioAjustesHandler = asyncHandler(
         : null,
     }));
 
-    res.status(200).json(result);
+    res.status(200).json({
+      data: result,
+      meta: {
+        total,
+        page,
+        limit: validLimit,
+        totalPages: Math.ceil(total / validLimit),
+      },
+    });
   }
 );
 

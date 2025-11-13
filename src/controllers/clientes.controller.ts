@@ -6,13 +6,38 @@ import { CreateClienteSchema, UpdateClienteSchema } from '../dtos/cliente.dto';
 import { IdParamSchema } from '../dtos/common.dto';
 
 /**
- * Obtiene todos los clientes del tenant autenticado
+ * Obtiene todos los clientes del tenant autenticado con paginación y búsqueda
  */
 export const getClientesHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const clientes = await clienteModel.findAllClientesByTenant(tenantId);
-    res.status(200).json(clientes);
+    
+    // Extraer parámetros de paginación y búsqueda
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const search = (req.query.q as string) || '';
+    
+    // Validar límites razonables
+    const validLimit = Math.min(Math.max(limit, 1), 100);
+    const skip = (page - 1) * validLimit;
+    
+    // Obtener clientes paginados
+    const { total, data } = await clienteModel.findClientesPaginados(tenantId, {
+      skip,
+      take: validLimit,
+      search: search.trim() || undefined,
+    });
+    
+    // Devolver datos con metadatos de paginación
+    res.status(200).json({
+      data,
+      meta: {
+        total,
+        page,
+        limit: validLimit,
+        totalPages: Math.ceil(total / validLimit),
+      },
+    });
   }
 );
 

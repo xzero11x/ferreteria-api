@@ -3,7 +3,56 @@ import { Prisma } from '@prisma/client';
 import { type CreateVentaDTO } from '../dtos/venta.dto';
 
 /**
+ * Obtiene ventas de un tenant con paginación, búsqueda y filtros (SERVER-SIDE)
+ */
+export const findVentasPaginadas = async (
+  tenantId: number,
+  params: {
+    skip: number;
+    take: number;
+    search?: string;
+    cliente_id?: number;
+    fecha_inicio?: Date;
+    fecha_fin?: Date;
+  }
+) => {
+  const { skip, take, search, cliente_id, fecha_inicio, fecha_fin } = params;
+
+  // Construir condición de búsqueda
+  const whereClause: Prisma.VentasWhereInput = {
+    tenant_id: tenantId,
+    ...(cliente_id && { cliente_id }),
+    ...(fecha_inicio && { created_at: { gte: fecha_inicio } }),
+    ...(fecha_fin && { created_at: { lte: fecha_fin } }),
+    ...(search && {
+      OR: [
+        { cliente: { nombre: { contains: search } } },
+        { metodo_pago: { contains: search } },
+      ],
+    }),
+  };
+
+  // Ejecutar dos consultas en transacción
+  const [total, data] = await db.$transaction([
+    db.ventas.count({ where: whereClause }),
+    db.ventas.findMany({
+      where: whereClause,
+      skip,
+      take,
+      orderBy: { id: 'desc' },
+      include: {
+        cliente: { select: { id: true, nombre: true } },
+        usuario: { select: { id: true, nombre: true, email: true } },
+      },
+    }),
+  ]);
+
+  return { total, data };
+};
+
+/**
  * Obtiene todas las ventas de un tenant con filtros opcionales
+ * @deprecated Usar findVentasPaginadas para listas grandes
  */
 export const findAllVentasByTenant = async (
   tenantId: number,
