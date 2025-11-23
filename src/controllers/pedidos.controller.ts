@@ -1,13 +1,6 @@
 import { type Response } from 'express';
 import asyncHandler from 'express-async-handler';
 import { type RequestWithAuth } from '../middlewares/auth.middleware';
-import { IdParamSchema } from '../dtos/common.dto';
-import {
-  ListPedidosQuerySchema,
-  ConfirmarPedidoSchema,
-  CancelarPedidoSchema,
-  GenerarVentaSchema,
-} from '../dtos/pedido.dto';
 import * as pedidosModel from '../models/pedidos.model';
 import * as tenantModel from '../models/tenant.model';
 import { EstadoPedido } from '@prisma/client';
@@ -18,13 +11,7 @@ import { EstadoPedido } from '@prisma/client';
 export const getPedidosHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parseQuery = ListPedidosQuerySchema.safeParse(req.query);
-    if (!parseQuery.success) {
-      res.status(400).json({ message: 'Query inválida', errors: parseQuery.error.flatten() });
-      return;
-    }
-
-    const estado = parseQuery.data.estado as EstadoPedido | undefined;
+    const estado = req.query.estado as EstadoPedido | undefined;
     const pedidos = await pedidosModel.findAllPedidosByTenant(tenantId, estado);
 
     // Configuración del tenant para alertas por vencer
@@ -47,7 +34,7 @@ export const getPedidosHandler = asyncHandler(
       };
     });
 
-    res.status(200).json(result);
+    res.status(200).json({ data: result });
   }
 );
 
@@ -57,15 +44,11 @@ export const getPedidosHandler = asyncHandler(
 export const getPedidoByIdHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
+    const id = Number(req.params.id);
 
     const pedido = await pedidosModel.findPedidoByIdAndTenantWithDetalles(
       tenantId,
-      parsedId.data.id
+      id
     );
     if (!pedido) {
       res.status(404).json({ message: 'Pedido no encontrado.' });
@@ -97,20 +80,11 @@ export const getPedidoByIdHandler = asyncHandler(
 export const confirmarPedidoHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const parseBody = ConfirmarPedidoSchema.safeParse(req.body);
-    if (!parseBody.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parseBody.error.flatten() });
-      return;
-    }
+    const id = Number(req.params.id);
 
     const pedido = await pedidosModel.findPedidoByIdAndTenantWithDetalles(
       tenantId,
-      parsedId.data.id
+      id
     );
     if (!pedido) {
       res.status(404).json({ message: 'Pedido no encontrado.' });
@@ -123,14 +97,14 @@ export const confirmarPedidoHandler = asyncHandler(
 
     const updated = await pedidosModel.updatePedidoEstadoByIdAndTenant(
       tenantId,
-      parsedId.data.id,
+      id,
       'confirmado',
       req.user?.id
     );
     res.status(200).json({
       id: updated!.id,
       estado: updated!.estado,
-      mensaje: parseBody.data.mensaje ?? null,
+      mensaje: req.body.mensaje ?? null,
     });
   }
 );
@@ -141,20 +115,11 @@ export const confirmarPedidoHandler = asyncHandler(
 export const cancelarPedidoHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const parseBody = CancelarPedidoSchema.safeParse(req.body);
-    if (!parseBody.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parseBody.error.flatten() });
-      return;
-    }
+    const id = Number(req.params.id);
 
     const pedido = await pedidosModel.findPedidoByIdAndTenantWithDetalles(
       tenantId,
-      parsedId.data.id
+      id
     );
     if (!pedido) {
       res.status(404).json({ message: 'Pedido no encontrado.' });
@@ -167,14 +132,14 @@ export const cancelarPedidoHandler = asyncHandler(
 
     const updated = await pedidosModel.updatePedidoEstadoByIdAndTenant(
       tenantId,
-      parsedId.data.id,
+      id,
       'cancelado',
       req.user?.id
     );
     res.status(200).json({
       id: updated!.id,
       estado: updated!.estado,
-      razon: parseBody.data.razon,
+      razon: req.body.razon,
     });
   }
 );
@@ -185,20 +150,11 @@ export const cancelarPedidoHandler = asyncHandler(
 export const generarVentaDesdePedidoHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const parseBody = GenerarVentaSchema.safeParse(req.body);
-    if (!parseBody.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parseBody.error.flatten() });
-      return;
-    }
+    const id = Number(req.params.id);
 
     const pedido = await pedidosModel.findPedidoByIdAndTenantWithDetalles(
       tenantId,
-      parsedId.data.id
+      id
     );
     if (!pedido) {
       res.status(404).json({ message: 'Pedido no encontrado.' });
@@ -212,9 +168,9 @@ export const generarVentaDesdePedidoHandler = asyncHandler(
     try {
       const venta = await pedidosModel.generarVentaDesdePedido(
         tenantId,
-        parsedId.data.id,
+        id,
         req.user?.id,
-        parseBody.data.metodo_pago
+        req.body.metodo_pago
       );
       if (!venta) {
         res.status(404).json({ message: 'Pedido no encontrado.' });
@@ -222,7 +178,7 @@ export const generarVentaDesdePedidoHandler = asyncHandler(
       }
       res.status(201).json({
         id: venta.id,
-        total: venta.total,
+        total: Number(venta.total),
         metodo_pago: venta.metodo_pago,
         created_at: venta.created_at,
         pedido_origen_id: venta.pedido_origen_id,

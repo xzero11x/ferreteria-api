@@ -126,7 +126,7 @@ export const createInventarioAjuste = async (
     }
 
     // Validar que no se pueda hacer salida si no hay stock suficiente
-    if (data.tipo === 'salida' && producto.stock < data.cantidad) {
+    if (data.tipo === 'salida' && Number(producto.stock) < Number(data.cantidad)) {
       const err = new Error(
         `Stock insuficiente para ajuste de salida. Stock actual: ${producto.stock}, Cantidad solicitada: ${data.cantidad}`
       );

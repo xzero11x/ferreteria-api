@@ -1,6 +1,27 @@
 import { db } from '../config/db';
 import { type Prisma } from '@prisma/client';
 import { type CreateProductoDTO, type UpdateProductoDTO } from '../dtos/producto.dto';
+import * as tenantModel from './tenant.model';
+
+/**
+ * Calcula precio_venta desde precio_base según afectación IGV
+ */
+const calcularPrecioVenta = async (producto: any, tenantId: number): Promise<any> => {
+  const fiscalConfig = await tenantModel.getTenantFiscalConfig(tenantId);
+  
+  let precio_venta = Number(producto.precio_base);
+  
+  // Si NO está exonerado regionalmente Y el producto es GRAVADO, aplicar IGV
+  if (!fiscalConfig.exonerado_regional && producto.afectacion_igv === 'GRAVADO') {
+    const tasa = fiscalConfig.tasa_impuesto / 100;
+    precio_venta = Number(producto.precio_base) * (1 + tasa);
+  }
+  
+  return {
+    ...producto,
+    precio_venta: Number(precio_venta.toFixed(2)),
+  };
+};
 
 /**
  * Obtiene productos de un tenant con paginación y búsqueda (SERVER-SIDE)
@@ -25,7 +46,7 @@ export const findProductosPaginados = async (
   };
 
   // Ejecutar dos consultas en transacción para obtener total y datos
-  const [total, data] = await db.$transaction([
+  const [total, productos] = await db.$transaction([
     db.productos.count({ where: whereClause }),
     db.productos.findMany({
       where: whereClause,
@@ -35,12 +56,32 @@ export const findProductosPaginados = async (
       include: {
         categoria: {
           select: {
+            id: true,
             nombre: true,
+          },
+        },
+        marca: {
+          select: {
+            id: true,
+            nombre: true,
+          },
+        },
+        unidad_medida: {
+          select: {
+            id: true,
+            codigo: true,
+            nombre: true,
+            permite_decimales: true,
           },
         },
       },
     }),
   ]);
+
+  // Calcular precio_venta para cada producto
+  const data = await Promise.all(
+    productos.map(p => calcularPrecioVenta(p, tenantId))
+  );
 
   return { total, data };
 };
@@ -69,16 +110,40 @@ export const findAllProductosByTenant = async (tenantId: number) => {
  * Busca un producto por id validando pertenencia al tenant
  */
 export const findProductoByIdAndTenant = async (tenantId: number, id: number) => {
-  return db.productos.findFirst({
+  const producto = await db.productos.findFirst({
     where: { id, tenant_id: tenantId },
     include: {
-      categoria: { select: { nombre: true } },
+      categoria: { 
+        select: { 
+          id: true,
+          nombre: true 
+        } 
+      },
+      marca: {
+        select: {
+          id: true,
+          nombre: true,
+        },
+      },
+      unidad_medida: {
+        select: {
+          id: true,
+          codigo: true,
+          nombre: true,
+          permite_decimales: true,
+        },
+      },
     },
   });
+  
+  if (!producto) return null;
+  
+  return calcularPrecioVenta(producto, tenantId);
 };
 
 /**
  * Crea un nuevo producto para un tenant específico
+ * Implementa cálculo inverso: precio_venta (con IGV) → precio_base (sin IGV)
  */
 export const createProducto = async (
   data: CreateProductoDTO,
@@ -86,7 +151,7 @@ export const createProducto = async (
   tx?: Prisma.TransactionClient
 ) => {
   const prismaClient = tx || db;
-  const { categoria_id, ...productoData } = data;
+  const { categoria_id, precio_venta, afectacion_igv, ...productoData } = data;
 
   // Validación multi-tenant: si se especifica categoría, debe pertenecer al mismo tenant
   if (categoria_id) {
@@ -101,17 +166,36 @@ export const createProducto = async (
     }
   }
 
-  return prismaClient.productos.create({
+  // Obtener configuración tributaria del tenant
+  const fiscalConfig = await tenantModel.getTenantFiscalConfig(tenantId);
+
+  // CÁLCULO INVERSO: precio_venta (CON IGV) → precio_base (SIN IGV)
+  let precio_base_calculado = precio_venta;
+
+  // Si el tenant NO está exonerado regionalmente Y el producto es GRAVADO
+  if (!fiscalConfig.exonerado_regional && afectacion_igv === 'GRAVADO') {
+    const tasa = fiscalConfig.tasa_impuesto / 100; // 18% → 0.18
+    precio_base_calculado = precio_venta / (1 + tasa);
+  }
+  // Si el producto es EXONERADO/INAFECTO o tenant exonerado, precio_base = precio_venta
+
+  const producto = await prismaClient.productos.create({
     data: {
       ...productoData,
+      precio_base: Number(precio_base_calculado.toFixed(2)),
+      afectacion_igv: afectacion_igv,
       tenant_id: tenantId,
       ...(categoria_id && { categoria_id }),
     },
   });
+
+  // Devolver con precio_venta calculado
+  return calcularPrecioVenta(producto, tenantId);
 };
 
 /**
  * Actualiza un producto por id dentro de un tenant
+ * Implementa cálculo inverso si se actualiza precio_venta o afectacion_igv
  */
 export const updateProductoByIdAndTenant = async (
   tenantId: number,
@@ -135,13 +219,32 @@ export const updateProductoByIdAndTenant = async (
     }
   }
 
-  return db.productos.update({
+  // Preparar datos para actualización
+  const updateData: any = { ...data };
+
+  // CÁLCULO INVERSO si se proporciona precio_venta
+  if (data.precio_venta !== undefined) {
+    const fiscalConfig = await tenantModel.getTenantFiscalConfig(tenantId);
+    const afectacion = data.afectacion_igv || existing.afectacion_igv;
+
+    let precio_base_calculado = data.precio_venta;
+
+    if (!fiscalConfig.exonerado_regional && afectacion === 'GRAVADO') {
+      const tasa = fiscalConfig.tasa_impuesto / 100;
+      precio_base_calculado = data.precio_venta / (1 + tasa);
+    }
+
+    updateData.precio_base = Number(precio_base_calculado.toFixed(2));
+    delete updateData.precio_venta; // No existe en el schema
+  }
+
+  const producto = await db.productos.update({
     where: { id },
-    data: {
-      ...data,
-      // no permitir cambiar tenant_id
-    },
+    data: updateData,
   });
+
+  // Devolver con precio_venta calculado
+  return calcularPrecioVenta(producto, tenantId);
 };
 
 /**

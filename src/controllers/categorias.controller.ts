@@ -6,13 +6,36 @@ import { CreateCategoriaSchema, UpdateCategoriaSchema } from '../dtos/categoria.
 import { IdParamSchema } from '../dtos/common.dto';
 
 /**
- * Obtiene todas las categorías del tenant autenticado
+ * Obtiene todas las categorías del tenant autenticado con paginación
  */
 export const getCategoriasHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const categorias = await categoriaModel.findAllCategoriasByTenant(tenantId);
-    res.status(200).json(categorias);
+    
+    // Extraer parámetros de paginación
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    
+    // Validar límites razonables
+    const validLimit = Math.min(Math.max(limit, 1), 100); // Entre 1 y 100
+    const skip = (page - 1) * validLimit;
+    
+    // Obtener categorías paginadas
+    const { total, data } = await categoriaModel.findCategoriasPaginadas(tenantId, {
+      skip,
+      take: validLimit,
+    });
+    
+    // Devolver datos con metadatos de paginación
+    res.status(200).json({
+      data,
+      meta: {
+        total,
+        page,
+        limit: validLimit,
+        totalPages: Math.ceil(total / validLimit),
+      },
+    });
   }
 );
 
@@ -22,14 +45,9 @@ export const getCategoriasHandler = asyncHandler(
 export const createCategoriaHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parse = CreateCategoriaSchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-      return;
-    }
 
     try {
-      const nueva = await categoriaModel.createCategoria(parse.data, tenantId);
+      const nueva = await categoriaModel.createCategoria(req.body, tenantId);
       res.status(201).json(nueva);
     } catch (error: any) {
       if (error.code === 'P2002') {
@@ -47,12 +65,8 @@ export const createCategoriaHandler = asyncHandler(
 export const getCategoriaByIdHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const categoria = await categoriaModel.findCategoriaByIdAndTenant(tenantId, parsedId.data.id);
+    const { id } = req.params;
+    const categoria = await categoriaModel.findCategoriaByIdAndTenant(tenantId, Number(id));
     if (!categoria) {
       res.status(404).json({ message: 'Categoría no encontrada.' });
       return;
@@ -67,21 +81,12 @@ export const getCategoriaByIdHandler = asyncHandler(
 export const updateCategoriaHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const parse = UpdateCategoriaSchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-      return;
-    }
+    const { id } = req.params;
     try {
       const updated = await categoriaModel.updateCategoriaByIdAndTenant(
         tenantId,
-        parsedId.data.id,
-        parse.data
+        Number(id),
+        req.body
       );
       if (!updated) {
         res.status(404).json({ message: 'Categoría no encontrada.' });
@@ -104,12 +109,8 @@ export const updateCategoriaHandler = asyncHandler(
 export const desactivarCategoriaHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const deleted = await categoriaModel.desactivarCategoriaByIdAndTenant(tenantId, parsedId.data.id);
+    const { id } = req.params;
+    const deleted = await categoriaModel.desactivarCategoriaByIdAndTenant(tenantId, Number(id));
     if (!deleted) {
       res.status(404).json({ message: 'Categoría no encontrada.' });
       return;

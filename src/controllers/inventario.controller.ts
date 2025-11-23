@@ -1,13 +1,9 @@
 import { type Response } from 'express';
 import asyncHandler from 'express-async-handler';
 import { type RequestWithAuth } from '../middlewares/auth.middleware';
-import { IdParamSchema } from '../dtos/common.dto';
-import {
-  CreateInventarioAjusteSchema,
-  ListInventarioAjustesQuerySchema,
-} from '../dtos/inventario.dto';
 import * as inventarioModel from '../models/inventario.model';
 import { TipoAjuste } from '@prisma/client';
+// Validación manejada por middleware validateRequest
 
 /**
  * GET /api/inventario/ajustes — Lista ajustes de inventario con paginación, búsqueda y filtros
@@ -15,11 +11,6 @@ import { TipoAjuste } from '@prisma/client';
 export const getInventarioAjustesHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parseQuery = ListInventarioAjustesQuerySchema.safeParse(req.query);
-    if (!parseQuery.success) {
-      res.status(400).json({ message: 'Query inválida', errors: parseQuery.error.flatten() });
-      return;
-    }
 
     // Parámetros de paginación
     const page = parseInt(req.query.page as string) || 1;
@@ -34,10 +25,10 @@ export const getInventarioAjustesHandler = asyncHandler(
       skip,
       take: validLimit,
       search: search.trim() || undefined,
-      producto_id: parseQuery.data.producto_id,
-      tipo: parseQuery.data.tipo as TipoAjuste | undefined,
-      fecha_inicio: parseQuery.data.fecha_inicio ? new Date(parseQuery.data.fecha_inicio) : undefined,
-      fecha_fin: parseQuery.data.fecha_fin ? new Date(parseQuery.data.fecha_fin) : undefined,
+      producto_id: req.query.producto_id ? Number(req.query.producto_id) : undefined,
+      tipo: req.query.tipo as TipoAjuste | undefined,
+      fecha_inicio: req.query.fecha_inicio ? new Date(req.query.fecha_inicio as string) : undefined,
+      fecha_fin: req.query.fecha_fin ? new Date(req.query.fecha_fin as string) : undefined,
     };
 
     const { total, data: ajustes } = await inventarioModel.findInventarioAjustesPaginados(tenantId, filters);
@@ -57,8 +48,11 @@ export const getInventarioAjustesHandler = asyncHandler(
           }
         : null,
       usuario: a.usuario
-        ? { id: a.usuario.id, nombre: a.usuario.nombre }
-        : null,
+        ? { 
+            id: a.usuario.id, 
+            nombre: a.usuario.nombre || a.usuario.email || 'Usuario sin nombre'
+          }
+        : { id: 0, nombre: 'Sistema' },  // ✅ Mostrar "Sistema" cuando no hay usuario
     }));
 
     res.status(200).json({
@@ -79,15 +73,11 @@ export const getInventarioAjustesHandler = asyncHandler(
 export const getInventarioAjusteByIdHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
+    const id = Number(req.params.id);
 
     const ajuste = await inventarioModel.findInventarioAjusteByIdAndTenant(
       tenantId,
-      parsedId.data.id
+      id
     );
     if (!ajuste) {
       res.status(404).json({ message: 'Ajuste de inventario no encontrado.' });
@@ -127,15 +117,10 @@ export const createInventarioAjusteHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
     const usuarioId = req.user?.id;
-    const parse = CreateInventarioAjusteSchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-      return;
-    }
 
     try {
       const nuevoAjuste = await inventarioModel.createInventarioAjuste(
-        parse.data,
+        req.body,
         tenantId,
         usuarioId
       );
@@ -169,15 +154,11 @@ export const createInventarioAjusteHandler = asyncHandler(
 export const deleteInventarioAjusteHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
+    const id = Number(req.params.id);
 
     const deleted = await inventarioModel.deleteInventarioAjusteByIdAndTenant(
       tenantId,
-      parsedId.data.id
+      id
     );
     if (!deleted) {
       res.status(404).json({ message: 'Ajuste de inventario no encontrado.' });

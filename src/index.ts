@@ -1,5 +1,8 @@
 import express, { type Application, type Request, type Response } from 'express';
 import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
+import * as fs from 'fs';
+import * as path from 'path';
 import { db } from './config/db';
 import authRoutes from './routes/auth.routes';
 import productosRoutes from './routes/productos.routes';
@@ -13,6 +16,17 @@ import ordenesCompraRoutes from './routes/ordenes-compra.routes';
 import tenantRoutes from './routes/tenant.routes';
 import usuariosRoutes from './routes/usuarios.routes';
 import reportesRoutes from './routes/reportes.routes';
+// Hito 3: Control de Caja y SUNAT
+import cajasRoutes from './routes/cajas.routes';
+import sesionesCajaRoutes from './routes/sesiones-caja.routes';
+import movimientosCajaRoutes from './routes/movimientos-caja.routes';
+import seriesRoutes from './routes/series.routes';
+// Hito 4: Auditoría y Storage
+import auditoriaRoutes from './routes/auditoria.routes';
+import { auditMiddleware } from './middlewares/audit.middleware';
+// Tablas Maestras Normalizadas
+import unidadesMedidaRoutes from './routes/unidades-medida.routes';
+import marcasRoutes from './routes/marcas.routes';
 
 const app: Application = express();
 const PORT: number = parseInt(process.env.PORT || '3001');
@@ -45,6 +59,28 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Hito 4: Audit middleware (aplica a POST/PUT/DELETE/PATCH después del healthcheck)
+app.use(auditMiddleware);
+
+// Cargar el OpenAPI generado desde Zod schemas
+const openapiGeneratedPath = path.join(__dirname, '../openapi-generated.json');
+if (!fs.existsSync(openapiGeneratedPath)) {
+  throw new Error('❌ OpenAPI document not found. Run: npm run generate:openapi');
+}
+const openapiGenerated = JSON.parse(fs.readFileSync(openapiGeneratedPath, 'utf-8'));
+
+// Swagger UI - Documentación API (usando el OpenAPI generado)
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openapiGenerated, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Ferretería API - Documentación Schema-First',
+}));
+
+// Endpoint para obtener el JSON de OpenAPI generado
+app.get('/api-docs.json', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(openapiGenerated);
+});
+
 // Healthcheck endpoint
 app.get('/api/healthcheck', async (req: Request, res: Response) => {
   try {
@@ -74,6 +110,16 @@ app.use('/api/compras', ordenesCompraRoutes);
 app.use('/api/tenant', tenantRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/reportes', reportesRoutes);
+// Tablas Maestras Normalizadas
+app.use('/api/unidades-medida', unidadesMedidaRoutes);
+app.use('/api/marcas', marcasRoutes);
+// Hito 3: Control de Caja y SUNAT
+app.use('/api/cajas', cajasRoutes);
+app.use('/api/sesiones-caja', sesionesCajaRoutes);
+app.use('/api/movimientos-caja', movimientosCajaRoutes);
+app.use('/api/series', seriesRoutes);
+// Hito 4: Auditoría
+app.use('/api/auditoria', auditoriaRoutes);
 
 // Iniciar servidor
 try {

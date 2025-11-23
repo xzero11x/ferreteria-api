@@ -3,6 +3,27 @@ import { type Prisma } from '@prisma/client';
 import { type CreateCategoriaDTO, type UpdateCategoriaDTO } from '../dtos/categoria.dto';
 
 /**
+ * Obtiene categorías paginadas de un tenant específico (solo activas)
+ */
+export const findCategoriasPaginadas = async (
+  tenantId: number,
+  options: { skip: number; take: number }
+) => {
+  const [total, data] = await Promise.all([
+    db.categorias.count({
+      where: { tenant_id: tenantId, isActive: true },
+    }),
+    db.categorias.findMany({
+      where: { tenant_id: tenantId, isActive: true },
+      orderBy: { nombre: 'asc' },
+      skip: options.skip,
+      take: options.take,
+    }),
+  ]);
+  return { total, data };
+};
+
+/**
  * Obtiene todas las categorías de un tenant específico (solo activas)
  */
 export const findAllCategoriasByTenant = async (tenantId: number) => {

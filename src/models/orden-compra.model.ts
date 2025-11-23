@@ -1,6 +1,8 @@
 import { db } from '../config/db';
 import { EstadoOrdenCompra } from '@prisma/client';
-import { type CreateOrdenCompraDTO, type UpdateOrdenCompraDTO } from '../dtos/orden-compra.dto';
+import { type CreateOrdenCompraDTO, type UpdateOrdenCompraDTO, type RecibirOrdenCompraDTO } from '../dtos/orden-compra.dto';
+import { IGVCalculator } from '../services/igv-calculator.service';
+import { validarProveedorParaFactura, validarFormatoSerie, validarFormatoNumero } from '../utils/validaciones-fiscales';
 
 /**
  * Obtiene todas las órdenes de compra de un tenant con filtros opcionales
@@ -54,6 +56,7 @@ export const findOrdenCompraByIdAndTenant = async (tenantId: number, id: number)
 
 /**
  * Crea una nueva orden de compra con sus detalles (transacción)
+ * FASE 2.3: Integra cálculos de IGV y validaciones fiscales
  */
 export const createOrdenCompra = async (
   data: CreateOrdenCompraDTO,
@@ -61,12 +64,6 @@ export const createOrdenCompra = async (
   usuarioId?: number
 ) => {
   return db.$transaction(async (tx) => {
-    // Calcular total
-    let total = 0;
-    for (const detalle of data.detalles) {
-      total += Number(detalle.costo_unitario) * detalle.cantidad;
-    }
-
     // Validar que todos los productos pertenezcan al tenant
     for (const detalle of data.detalles) {
       const producto = await tx.productos.findFirst({
@@ -83,42 +80,78 @@ export const createOrdenCompra = async (
       }
     }
 
-    // Validar proveedor si se especifica
-    if (data.proveedor_id) {
-      const proveedor = await tx.proveedores.findFirst({
-        where: { id: data.proveedor_id, tenant_id: tenantId },
-        select: { id: true },
-      });
-
-      if (!proveedor) {
-        const err = new Error(
-          `Proveedor con ID ${data.proveedor_id} no encontrado en este tenant`
-        );
-        (err as any).code = 'PROVEEDOR_NOT_FOUND';
-        throw err;
-      }
-    }
-
-    // Crear orden de compra
-    const nuevaOrden = await tx.ordenesCompra.create({
-      data: {
-        tenant_id: tenantId,
-        total: total,
-        estado: 'pendiente',
-        proveedor_id: data.proveedor_id ?? null,
-        usuario_id: usuarioId ?? null,
+    // Validar proveedor (ahora es obligatorio)
+    const proveedor = await tx.proveedores.findFirst({
+      where: { id: data.proveedor_id, tenant_id: tenantId },
+      select: { 
+        id: true, 
+        nombre: true, 
+        ruc_identidad: true, 
+        tipo_documento: true 
       },
     });
 
-    // Crear detalles de orden de compra
+    if (!proveedor) {
+      const err = new Error(
+        `Proveedor con ID ${data.proveedor_id} no encontrado en este tenant`
+      );
+      (err as any).code = 'PROVEEDOR_NOT_FOUND';
+      throw err;
+    }
+
+    // Validar que proveedor tiene RUC si se emite FACTURA
+    if (data.tipo_comprobante === 'FACTURA') {
+      validarProveedorParaFactura(proveedor);
+    }
+
+    // Calcular totales con desglose IGV
+    const detallesParaCalculo = data.detalles.map(d => ({
+      cantidad: d.cantidad,
+      costo_unitario: d.costo_unitario, // Ya viene con IGV incluido
+    }));
+    
+    const totales = IGVCalculator.calcularTotalesOrden(detallesParaCalculo);
+
+    // Crear orden de compra con campos fiscales
+    const nuevaOrden = await tx.ordenesCompra.create({
+      data: {
+        tenant_id: tenantId,
+        proveedor_id: data.proveedor_id,
+        proveedor_ruc: proveedor.ruc_identidad,
+        usuario_id: usuarioId ?? null,
+        
+        // Campos fiscales
+        tipo_comprobante: data.tipo_comprobante ?? null,
+        serie: data.serie ?? null,
+        numero: data.numero ?? null,
+        fecha_emision: data.fecha_emision ? new Date(data.fecha_emision) : null,
+        
+        // Totales con desglose IGV
+        subtotal_base: totales.subtotal_base,
+        impuesto_igv: totales.impuesto_igv,
+        total: totales.total,
+        
+        estado: 'pendiente',
+      },
+    });
+
+    // Crear detalles de orden de compra con desglose IGV
     for (const detalle of data.detalles) {
+      const desglose = IGVCalculator.calcularDesgloseCompra(detalle.costo_unitario);
+      
       await tx.ordenCompraDetalles.create({
         data: {
           tenant_id: tenantId,
           orden_compra_id: nuevaOrden.id,
           producto_id: detalle.producto_id,
           cantidad: detalle.cantidad,
-          costo_unitario: detalle.costo_unitario,
+          
+          // Costos con desglose IGV
+          costo_unitario: detalle.costo_unitario, // Legacy - con IGV
+          costo_unitario_total: detalle.costo_unitario, // Con IGV
+          costo_unitario_base: desglose.costo_base, // Sin IGV
+          tasa_igv: IGVCalculator.TASA_IGV,
+          igv_linea: desglose.igv * detalle.cantidad,
         },
       });
     }
@@ -165,17 +198,21 @@ export const updateOrdenCompraByIdAndTenant = async (
 
 /**
  * Registra la recepción de una orden de compra (cambia estado a 'recibida' e incrementa stock)
+ * FASE 2.4: Agrega validación de serie/número y prevención de duplicados
  */
 export const recibirOrdenCompra = async (
   tenantId: number,
   id: number,
-  fechaRecepcion?: Date
+  datosRecepcion: RecibirOrdenCompraDTO
 ) => {
   return db.$transaction(async (tx) => {
     // Verificar que la orden existe y está pendiente
     const orden = await tx.ordenesCompra.findFirst({
       where: { id, tenant_id: tenantId },
       include: {
+        proveedor: {
+          select: { ruc_identidad: true },
+        },
         OrdenCompraDetalles: {
           select: { producto_id: true, cantidad: true },
         },
@@ -196,6 +233,29 @@ export const recibirOrdenCompra = async (
       throw err;
     }
 
+    // Validar formato de serie y número
+    validarFormatoSerie(datosRecepcion.serie);
+    validarFormatoNumero(datosRecepcion.numero);
+
+    // Verificar que no existe duplicado de comprobante para este proveedor
+    const duplicado = await tx.ordenesCompra.findFirst({
+      where: {
+        tenant_id: tenantId,
+        serie: datosRecepcion.serie,
+        numero: datosRecepcion.numero,
+        proveedor_ruc: orden.proveedor_ruc,
+        id: { not: id }, // Excluir la orden actual
+      },
+    });
+
+    if (duplicado) {
+      const err = new Error(
+        `Ya existe un comprobante ${datosRecepcion.serie}-${datosRecepcion.numero} registrado para este proveedor (Orden #${duplicado.id})`
+      );
+      (err as any).code = 'COMPROBANTE_DUPLICADO';
+      throw err;
+    }
+
     // Incrementar stock de cada producto
     for (const detalle of orden.OrdenCompraDetalles) {
       await tx.productos.update({
@@ -208,12 +268,16 @@ export const recibirOrdenCompra = async (
       });
     }
 
-    // Actualizar estado de la orden
+    // Actualizar estado de la orden con datos del comprobante
     const ordenActualizada = await tx.ordenesCompra.update({
       where: { id },
       data: {
         estado: 'recibida',
-        fecha_recepcion: fechaRecepcion ?? new Date(),
+        serie: datosRecepcion.serie,
+        numero: datosRecepcion.numero,
+        fecha_recepcion: datosRecepcion.fecha_recepcion 
+          ? new Date(datosRecepcion.fecha_recepcion) 
+          : new Date(),
       },
     });
 

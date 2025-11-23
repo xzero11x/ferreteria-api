@@ -13,7 +13,7 @@ export const getUsuariosHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
     const usuarios = await usuarioModel.findAllUsuariosByTenant(tenantId);
-    res.status(200).json(usuarios);
+    res.status(200).json({ data: usuarios });
   }
 );
 
@@ -23,12 +23,8 @@ export const getUsuariosHandler = asyncHandler(
 export const getUsuarioByIdHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const usuario = await usuarioModel.findUsuarioByIdAndTenant(tenantId, parsedId.data.id);
+    const { id } = req.params;
+    const usuario = await usuarioModel.findUsuarioByIdAndTenant(tenantId, Number(id));
     if (!usuario) {
       res.status(404).json({ message: 'Usuario no encontrado.' });
       return;
@@ -43,14 +39,9 @@ export const getUsuarioByIdHandler = asyncHandler(
 export const createUsuarioHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parse = CreateUsuarioSchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-      return;
-    }
 
     try {
-      const { password, ...userData } = parse.data;
+      const { password, ...userData } = req.body;
       
       // Hash de la contraseña
       const salt = await bcrypt.genSalt(10);
@@ -90,19 +81,10 @@ export const createUsuarioHandler = asyncHandler(
 export const updateUsuarioHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const parse = UpdateUsuarioSchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-      return;
-    }
+    const { id } = req.params;
 
     try {
-      const { password, ...updateData } = parse.data;
+      const { password, ...updateData } = req.body;
       
       // Si se proporciona una nueva contraseña, hashearla
       let dataToUpdate = { ...updateData };
@@ -114,7 +96,7 @@ export const updateUsuarioHandler = asyncHandler(
 
       const updated = await usuarioModel.updateUsuarioByIdAndTenant(
         tenantId,
-        parsedId.data.id,
+        Number(id),
         dataToUpdate
       );
       
@@ -141,20 +123,16 @@ export const updateUsuarioHandler = asyncHandler(
 export const desactivarUsuarioHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
+    const { id } = req.params;
 
     // No permitir que un usuario se desactive a sí mismo
-    if (req.user?.id === parsedId.data.id) {
-      res.status(403).json({ message: 'No puedes desactivar tu propia cuenta.' });
+    if (req.user?.id === Number(id)) {
+      res.status(400).json({ message: 'No puedes desactivarte a ti mismo.' });
       return;
     }
 
-    const deleted = await usuarioModel.desactivarUsuarioByIdAndTenant(tenantId, parsedId.data.id);
-    if (!deleted) {
+    const updated = await usuarioModel.desactivarUsuarioByIdAndTenant(tenantId, Number(id));
+    if (!updated) {
       res.status(404).json({ message: 'Usuario no encontrado.' });
       return;
     }

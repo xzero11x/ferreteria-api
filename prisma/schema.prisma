@@ -1,6 +1,7 @@
 // --- 1. Configuración de Prisma ---
 // Le dice a Prisma cómo conectarse (MariaDB usa el conector "mysql")
 // y dónde encontrar la URL de conexión (en el archivo .env)
+// Nota: El warning sobre 'url' es para Prisma 7+, estamos usando Prisma 5
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
@@ -42,8 +43,83 @@ enum TipoRecojo {
   envio
 }
 
+enum AfectacionIGV {
+  GRAVADO
+  EXONERADO
+  INAFECTO
+}
+
+// --- ENUM AÑADIDO PARA HITO 4: AUDITORÍA ---
+enum AccionAuditoria {
+  CREAR
+  ACTUALIZAR
+  ELIMINAR
+  ANULAR
+  AJUSTAR
+  LOGIN
+  LOGOUT
+}
+
+enum EstadoSesionCaja {
+  ABIERTA
+  CERRADA
+}
+
+enum TipoMovimientoCaja {
+  INGRESO
+  EGRESO
+}
+
+enum TipoComprobante {
+  FACTURA
+  BOLETA
+  NOTA_VENTA
+}
+
+enum TipoDocumento {
+  RUC
+  DNI
+  CE
+}
+
 
 // --- 3. Modelos de Base de Datos ---
+
+// --- Tablas Maestras (Normalizadas) ---
+
+model UnidadesMedida {
+  id                Int         @id @default(autoincrement())
+  codigo            String      // "UND", "KG", "MTR", "LTR", "M3", etc.
+  nombre            String      // "Unidad", "Kilogramo", "Metro", etc.
+  permite_decimales Boolean     @default(false)
+
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id         Int
+  tenant            Tenants     @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  // --- Relaciones ---
+  Productos         Productos[]
+
+  @@unique([tenant_id, codigo])
+  @@index([tenant_id])
+}
+
+model Marcas {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  logo_url  String?  // URL del logotipo (opcional)
+  isActive  Boolean  @default(true)  // Soft delete
+
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id Int
+  tenant    Tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  // --- Relaciones ---
+  Productos Productos[]
+
+  @@unique([tenant_id, nombre])
+  @@index([tenant_id])
+}
 
 // --- Tabla Maestra (Global) ---
 model Tenants {
@@ -68,6 +144,16 @@ model Tenants {
   // --- Relaciones añadidas para Pedidos ---
   Pedidos             Pedidos[]
   PedidoDetalles      PedidoDetalles[]
+  // --- Relaciones añadidas para normalización ---
+  UnidadesMedida      UnidadesMedida[]
+  Marcas              Marcas[]
+  // --- Relaciones añadidas para Hito 3: Control de Caja y SUNAT ---
+  Cajas               Cajas[]
+  SesionesCaja        SesionesCaja[]
+  MovimientosCaja     MovimientosCaja[]
+  Series              Series[]
+  // --- Relaciones añadidas para Hito 4: Auditoría ---
+  AuditoriaLogs       AuditoriaLogs[]
 }
 
 // --- Tablas de Negocio (Aisladas por Tenant) ---
@@ -92,6 +178,10 @@ model Usuarios {
   ventas             Ventas[]
   // --- Relación añadida para Pedidos ---
   pedidos_gestionados Pedidos[] @relation("UsuarioGestionPedido") // Pedidos gestionados por este empleado
+  // --- Relación añadida para Hito 3: Sesiones de Caja ---
+  sesiones_caja       SesionesCaja[]
+  // --- Relación añadida para Hito 4: Auditoría ---
+  auditoria_logs      AuditoriaLogs[]
 
   @@unique([tenant_id, email]) // El email es único POR tenant
   @@index([tenant_id])
@@ -119,10 +209,28 @@ model Productos {
   nombre         String
   sku            String?
   descripcion    String?
-  precio_venta   Decimal
+  
+  // --- Tributación ---
+  precio_base    Decimal  @db.Decimal(12,2)  // Precio SIN impuestos
+  afectacion_igv AfectacionIGV @default(GRAVADO)
+  
   costo_compra   Decimal?
-  stock          Int      @default(0)
+  
+  // --- Stock con precisión decimal ---
+  stock          Decimal  @default(0) @db.Decimal(12,3)
   stock_minimo   Int      @default(5)
+  
+  // --- URL de Imagen en Cloud Storage (Hito 4) ---
+  imagen_url     String?
+  
+  // --- Relación con Marcas (normalizada) ---
+  marca_id       Int?
+  marca          Marcas?  @relation(fields: [marca_id], references: [id], onDelete: SetNull)
+  
+  // --- Relación con Unidad de Medida (obligatoria) ---
+  unidad_medida_id Int
+  unidad_medida    UnidadesMedida @relation(fields: [unidad_medida_id], references: [id], onDelete: Restrict)
+  
   isActive       Boolean  @default(true)  // Borrado lógico
 
   // --- Aislamiento Multi-Tenant ---
@@ -143,12 +251,17 @@ model Productos {
   @@unique([tenant_id, sku])
   @@index([tenant_id])
   @@index([categoria_id])
+  @@index([marca_id])
+  @@index([unidad_medida_id])
 }
 
 model InventarioAjustes {
   id          Int        @id @default(autoincrement())
   tipo        TipoAjuste // Usamos el Enum
-  cantidad    Int
+  
+  // --- Cantidad con precisión decimal ---
+  cantidad     Decimal   @db.Decimal(12,3)
+  
   motivo      String
   created_at  DateTime   @default(now()) @map("created_at")
 
@@ -169,65 +282,88 @@ model InventarioAjustes {
 }
 
 model Proveedores {
-  id            Int     @id @default(autoincrement())
-  nombre        String
-  ruc_identidad String?
-  email         String?
-  telefono      String?
-  direccion     String?
-  isActive      Boolean @default(true)  // Borrado lógico
-
-  // --- Aislamiento Multi-Tenant ---
-  tenant_id     Int
-  tenant        Tenants @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-
-  // --- Relaciones ---
-  OrdenesCompra OrdenesCompra[]
-
-  @@unique([tenant_id, ruc_identidad])
-  @@index([tenant_id])
-}
-
-model OrdenesCompra {
-  id              Int                 @id @default(autoincrement())
-  total           Decimal?
-  estado          EstadoOrdenCompra   @default(pendiente) // Usamos el Enum
-  fecha_creacion  DateTime            @default(now()) @map("fecha_creacion")
-  fecha_recepcion DateTime?           @map("fecha_recepcion")
+  id              Int            @id @default(autoincrement())
+  nombre          String
+  ruc_identidad   String         // Ahora obligatorio
+  tipo_documento  TipoDocumento  @default(RUC) // Nuevo campo
+  email           String?
+  telefono        String?
+  direccion       String?
+  isActive        Boolean        @default(true)  // Borrado lógico
 
   // --- Aislamiento Multi-Tenant ---
   tenant_id       Int
-  tenant          Tenants             @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  tenant          Tenants        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
   // --- Relaciones ---
-  proveedor_id    Int?
-  proveedor       Proveedores?        @relation(fields: [proveedor_id], references: [id], onDelete: SetNull)
+  OrdenesCompra   OrdenesCompra[]
 
-  usuario_id      Int?
-  usuario         Usuarios?           @relation(fields: [usuario_id], references: [id], onDelete: SetNull)
+  @@unique([tenant_id, ruc_identidad])
+  @@index([tenant_id])
+  @@index([tipo_documento])
+}
+
+model OrdenesCompra {
+  id                 Int                 @id @default(autoincrement())
+  total              Decimal?
+  estado             EstadoOrdenCompra   @default(pendiente)
+  fecha_creacion     DateTime            @default(now()) @map("fecha_creacion")
+  fecha_recepcion    DateTime?           @map("fecha_recepcion")
+  
+  // --- CAMPOS FISCALES NUEVOS (FASE 1.2) ---
+  tipo_comprobante   String?             // 'FACTURA', 'BOLETA', 'GUIA', 'LEGACY'
+  serie              String?             // 'F005', 'B001', etc.
+  numero             String?             // '000345'
+  fecha_emision      DateTime?
+  fecha_contable     DateTime?           @default(now())
+  proveedor_ruc      String?             // Snapshot del RUC del proveedor
+  subtotal_base      Decimal?            @db.Decimal(12,2)  // Valor sin IGV
+  impuesto_igv       Decimal?            @db.Decimal(12,2)  // Monto de IGV
+
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id          Int
+  tenant             Tenants             @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  // --- Relaciones ---
+  proveedor_id       Int?
+  proveedor          Proveedores?        @relation(fields: [proveedor_id], references: [id], onDelete: SetNull)
+
+  usuario_id         Int?
+  usuario            Usuarios?           @relation(fields: [usuario_id], references: [id], onDelete: SetNull)
 
   OrdenCompraDetalles OrdenCompraDetalles[]
 
+  @@unique([serie, numero, proveedor_ruc, tenant_id], name: "unique_comprobante_compra")
   @@index([tenant_id])
   @@index([proveedor_id])
   @@index([usuario_id])
+  @@index([tipo_comprobante])
+  @@index([fecha_emision])
 }
 
 model OrdenCompraDetalles {
-  id              Int     @id @default(autoincrement())
-  cantidad        Int
-  costo_unitario  Decimal
+  id                    Int           @id @default(autoincrement())
+  
+  // --- Cantidad con precisión decimal ---
+  cantidad              Decimal       @db.Decimal(12,3)
+  
+  // --- CAMPOS DE DESGLOSE IGV (FASE 1.3) ---
+  costo_unitario        Decimal       // Campo legacy (mantener compatibilidad)
+  costo_unitario_base   Decimal?      @db.Decimal(12,4)  // Costo sin IGV
+  costo_unitario_total  Decimal?      @db.Decimal(12,4)  // Costo con IGV
+  tasa_igv              Decimal?      @db.Decimal(5,2) @default(18.00)
+  igv_linea             Decimal?      @db.Decimal(12,2)  // IGV total de la línea
 
   // --- Aislamiento Multi-Tenant ---
-  tenant_id         Int
-  tenant            Tenants     @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  tenant_id             Int
+  tenant                Tenants       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
   // --- Relaciones ---
-  orden_compra_id   Int
-  orden_compra      OrdenesCompra @relation(fields: [orden_compra_id], references: [id], onDelete: Cascade)
+  orden_compra_id       Int
+  orden_compra          OrdenesCompra @relation(fields: [orden_compra_id], references: [id], onDelete: Cascade)
 
-  producto_id       Int
-  producto          Productos   @relation(fields: [producto_id], references: [id]) // Sin onDelete: Cascade aquí
+  producto_id           Int
+  producto              Productos     @relation(fields: [producto_id], references: [id])
 
   @@index([tenant_id])
   @@index([orden_compra_id])
@@ -237,7 +373,9 @@ model OrdenCompraDetalles {
 model Clientes {
   id                  Int     @id @default(autoincrement())
   nombre              String
-  documento_identidad String?
+  documento_identidad String? // DNI, CE u otro
+  ruc                 String? // RUC (opcional, para facturación)
+  razon_social        String? // Razón Social (opcional, requerido si tiene RUC)
   email               String?
   telefono            String?
   direccion           String?
@@ -254,6 +392,7 @@ model Clientes {
 
   @@unique([tenant_id, documento_identidad])
   @@index([tenant_id])
+  @@index([ruc])
 }
 
 model Ventas {
@@ -277,18 +416,37 @@ model Ventas {
   pedido_origen_id Int?      @unique // Un pedido solo puede generar una venta
   pedido_origen    Pedidos?  @relation("VentaGenerada", fields: [pedido_origen_id], references: [id], onDelete: SetNull)
 
+  // --- Relaciones añadidas para Hito 3: Control de Caja y SUNAT ---
+  sesion_caja_id   Int?
+  sesion_caja      SesionesCaja? @relation(fields: [sesion_caja_id], references: [id], onDelete: SetNull)
+
+  serie_id         Int?
+  serie            Series?   @relation(fields: [serie_id], references: [id], onDelete: SetNull)
+
+  numero_comprobante Int?   // Correlativo de la serie
+
   VentaDetalles VentaDetalles[]
 
   @@index([tenant_id])
   @@index([cliente_id])
   @@index([usuario_id])
   @@index([pedido_origen_id]) // --- Índice añadido ---
+  @@index([sesion_caja_id])
+  @@index([serie_id])
+  @@unique([serie_id, numero_comprobante, tenant_id]) // Constraint único para evitar duplicados SUNAT
 }
 
 model VentaDetalles {
   id              Int     @id @default(autoincrement())
-  cantidad        Int
-  precio_unitario Decimal
+  
+  // --- Cantidad con precisión decimal ---
+  cantidad        Decimal @db.Decimal(12,3)
+  
+  // --- Snapshot Fiscal (Inmutable) ---
+  valor_unitario  Decimal @db.Decimal(12,2)  // Precio sin IGV
+  precio_unitario Decimal @db.Decimal(12,2)  // Precio con IGV
+  igv_total       Decimal @db.Decimal(12,2)  // Monto de IGV de esta línea
+  tasa_igv        Decimal @db.Decimal(5,2)   // Tasa aplicada (ej: 18.00)
 
   // --- Aislamiento Multi-Tenant ---
   tenant_id       Int
@@ -339,7 +497,9 @@ model Pedidos {
 
 model PedidoDetalles {
   id          Int     @id @default(autoincrement())
-  cantidad    Int
+  
+  // --- Cantidad con precisión decimal ---
+  cantidad     Decimal @db.Decimal(12,3)
 
   // --- Aislamiento Multi-Tenant (OBLIGATORIO) ---
   tenant_id   Int
@@ -355,4 +515,131 @@ model PedidoDetalles {
   @@index([tenant_id])
   @@index([pedido_id])
   @@index([producto_id])
+}
+
+// --- MODELOS PARA HITO 3: CONTROL DE CAJA Y SUNAT ---
+
+model Cajas {
+  id        Int      @id @default(autoincrement())
+  nombre    String   // "Caja Principal", "Caja Patio"
+  isActive  Boolean  @default(true)  // Permite deshabilitar cajas
+
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id Int
+  tenant    Tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  // --- Relaciones ---
+  sesiones  SesionesCaja[]
+  series    Series[]
+
+  @@unique([tenant_id, nombre])
+  @@index([tenant_id])
+}
+
+model SesionesCaja {
+  id              Int       @id @default(autoincrement())
+  fecha_apertura  DateTime  @default(now())
+  fecha_cierre    DateTime?
+  monto_inicial   Decimal   @db.Decimal(12,2)  // Fondo de cambio inicial
+  monto_final     Decimal?  @db.Decimal(12,2)  // Efectivo contado al cerrar
+  total_ventas    Decimal?  @db.Decimal(12,2)  // Calculado por el sistema
+  total_egresos   Decimal?  @db.Decimal(12,2)  // Suma de movimientos negativos
+  diferencia      Decimal?  @db.Decimal(12,2)  // (Real - Esperado)
+  estado          EstadoSesionCaja @default(ABIERTA)
+
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id       Int
+  tenant          Tenants   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  // --- Relaciones ---
+  caja_id         Int
+  caja            Cajas     @relation(fields: [caja_id], references: [id], onDelete: Cascade)
+
+  usuario_id      Int       // Cajero responsable
+  usuario         Usuarios  @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+
+  ventas          Ventas[]
+  movimientos     MovimientosCaja[]
+
+  @@index([tenant_id])
+  @@index([caja_id])
+  @@index([usuario_id])
+  @@index([estado])
+}
+
+model MovimientosCaja {
+  id          Int       @id @default(autoincrement())
+  tipo        TipoMovimientoCaja  // INGRESO, EGRESO
+  monto       Decimal   @db.Decimal(12,2)  // Valor absoluto
+  descripcion String    // "Compra de almuerzo", "Cambio de billetes"
+  fecha       DateTime  @default(now())
+
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id       Int
+  tenant          Tenants   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  // --- Relaciones ---
+  sesion_caja_id  Int
+  sesion_caja     SesionesCaja @relation(fields: [sesion_caja_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([sesion_caja_id])
+}
+
+model Series {
+  id                  Int      @id @default(autoincrement())
+  codigo              String   // "F001", "B001", "NV01" (4 caracteres)
+  tipo_comprobante    TipoComprobante  // FACTURA, BOLETA, NOTA_VENTA
+  correlativo_actual  Int      @default(0)  // Último número usado
+  isActive            Boolean  @default(true)  // Permite deshabilitar series antiguas
+
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id           Int
+  tenant              Tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  // --- Relaciones ---
+  caja_id             Int?     // FK a Cajas (opcional: asignar serie por caja)
+  caja                Cajas?   @relation(fields: [caja_id], references: [id], onDelete: SetNull)
+
+  ventas              Ventas[]
+
+  @@unique([tenant_id, codigo])
+  @@index([tenant_id])
+  @@index([caja_id])
+  @@index([tipo_comprobante])
+}
+
+// --- HITO 4: AUDITORÍA Y TRAZABILIDAD ---
+model AuditoriaLogs {
+  id              Int              @id @default(autoincrement())
+  
+  // --- Usuario que ejecutó la acción ---
+  usuario_id      Int
+  usuario         Usuarios         @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+  
+  // --- Acción realizada ---
+  accion          AccionAuditoria  // CREAR, ACTUALIZAR, ELIMINAR, etc.
+  tabla_afectada  String           // "Ventas", "Productos", "VentaDetalles"
+  registro_id     Int?             // ID del registro modificado
+  
+  // --- Snapshot de datos (JSON) ---
+  datos_antes     Json?            // Estado previo (para UPDATE/DELETE)
+  datos_despues   Json?            // Estado posterior (para CREATE/UPDATE)
+  
+  // --- Información de contexto ---
+  ip_address      String?          // Dirección IP de origen
+  user_agent      String?          // Información del navegador/dispositivo
+  
+  // --- Timestamp ---
+  fecha           DateTime         @default(now())
+  
+  // --- Aislamiento Multi-Tenant ---
+  tenant_id       Int
+  tenant          Tenants          @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  @@index([tenant_id])
+  @@index([usuario_id])
+  @@index([accion])
+  @@index([tabla_afectada])
+  @@index([fecha])
 }

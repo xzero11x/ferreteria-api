@@ -19,6 +19,7 @@ export const findClientesPaginados = async (
       OR: [
         { nombre: { contains: search } },
         { documento_identidad: { contains: search } },
+        { ruc: { contains: search } },
         { email: { contains: search } },
         { telefono: { contains: search } },
       ],
@@ -75,6 +76,8 @@ export const createCliente = async (
     data: {
       nombre: data.nombre,
       documento_identidad: data.documento_identidad ?? null,
+      ruc: data.ruc ?? null,
+      razon_social: data.razon_social ?? null,
       email: data.email ?? null,
       telefono: data.telefono ?? null,
       direccion: data.direccion ?? null,
@@ -98,6 +101,8 @@ export const updateClienteByIdAndTenant = async (
     data: {
       nombre: data.nombre ?? existing.nombre,
       documento_identidad: data.documento_identidad ?? existing.documento_identidad,
+      ruc: data.ruc ?? existing.ruc,
+      razon_social: data.razon_social ?? existing.razon_social,
       email: data.email ?? existing.email,
       telefono: data.telefono ?? existing.telefono,
       direccion: data.direccion ?? existing.direccion,

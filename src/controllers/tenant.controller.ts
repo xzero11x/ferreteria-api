@@ -2,7 +2,7 @@ import { type Response } from 'express';
 import asyncHandler from 'express-async-handler';
 import { type RequestWithAuth } from '../middlewares/auth.middleware';
 import * as tenantModel from '../models/tenant.model';
-import { TenantConfiguracionSchema } from '../dtos/tenant.dto';
+import { UpdateTenantConfiguracionSchema, UpdateTenantConfigFiscalSchema } from '../dtos/tenant.dto';
 import { Prisma } from '@prisma/client';
 
 // Utilidad simple para mezclar objetos profundamente
@@ -42,11 +42,6 @@ export const getTenantConfiguracionHandler = asyncHandler(
 export const updateTenantConfiguracionHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parse = TenantConfiguracionSchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-      return;
-    }
 
     const tenant = await tenantModel.findTenantById(tenantId);
     if (!tenant) {
@@ -55,9 +50,33 @@ export const updateTenantConfiguracionHandler = asyncHandler(
     }
 
     const current = (tenant.configuracion as any) ?? {};
-    const merged = deepMerge(current, parse.data) as Prisma.JsonObject;
+    const merged = deepMerge(current, req.body) as Prisma.JsonObject;
 
     const updated = await tenantModel.updateTenantConfiguracionById(tenantId, merged);
     res.status(200).json(updated.configuracion ?? {});
+  }
+);
+
+/**
+ * GET /api/tenant/configuracion/fiscal — Obtiene configuración tributaria del tenant
+ */
+export const getTenantFiscalConfigHandler = asyncHandler(
+  async (req: RequestWithAuth, res: Response) => {
+    const tenantId = req.tenantId!;
+    const fiscalConfig = await tenantModel.getTenantFiscalConfig(tenantId);
+    res.status(200).json(fiscalConfig);
+  }
+);
+
+/**
+ * PATCH /api/tenant/configuracion/fiscal — Actualiza solo configuración tributaria
+ */
+export const updateTenantFiscalConfigHandler = asyncHandler(
+  async (req: RequestWithAuth, res: Response) => {
+    const tenantId = req.tenantId!;
+
+    const updated = await tenantModel.updateTenantFiscalConfig(tenantId, req.body);
+    const fiscalConfig = await tenantModel.getTenantFiscalConfig(tenantId);
+    res.status(200).json(fiscalConfig);
   }
 );

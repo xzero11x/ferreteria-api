@@ -33,7 +33,7 @@ export const findPedidoByIdAndTenantWithDetalles = async (
       cliente: { select: { id: true, nombre: true } },
       detalles: {
         include: {
-          producto: { select: { id: true, nombre: true, stock: true, precio_venta: true } },
+          producto: { select: { id: true, nombre: true, stock: true, precio_base: true } },
         },
       },
     },
@@ -76,7 +76,7 @@ export const generarVentaDesdePedido = async (
     include: {
       cliente: true,
       detalles: {
-        include: { producto: { select: { id: true, precio_venta: true } } },
+        include: { producto: { select: { id: true, precio_base: true } } },
       },
     },
   });
@@ -94,9 +94,9 @@ export const generarVentaDesdePedido = async (
   }
 
   // Calcular total
-  const total = pedido.detalles.reduce((acc, det) => {
-    const precio = Number(det.producto.precio_venta);
-    return acc + precio * det.cantidad;
+  const total = pedido.detalles.reduce((acc: number, det: any) => {
+    const precio = Number(det.producto.precio_base);
+    return acc + precio * Number(det.cantidad);
   }, 0);
 
   // Transacción: crear venta y detalles
@@ -112,11 +112,14 @@ export const generarVentaDesdePedido = async (
       },
     });
 
-    if (pedido.detalles.length > 0) {
+    if (pedido.detalles && pedido.detalles.length > 0) {
       await tx.ventaDetalles.createMany({
-        data: pedido.detalles.map((det) => ({
+        data: pedido.detalles.map((det: any) => ({
           cantidad: det.cantidad,
-          precio_unitario: det.producto.precio_venta as Prisma.Decimal,
+          valor_unitario: det.producto.precio_base as any,
+          precio_unitario: det.producto.precio_base as any,
+          igv_total: 0,
+          tasa_igv: 0,
           tenant_id: tenantId,
           venta_id: nuevaVenta.id,
           producto_id: det.producto_id,

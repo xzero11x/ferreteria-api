@@ -47,14 +47,9 @@ export const getProductosHandler = asyncHandler(
 export const createProductoHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parse = CreateProductoSchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-      return;
-    }
 
     try {
-      const nuevoProducto = await productoModel.createProducto(parse.data, tenantId);
+      const nuevoProducto = await productoModel.createProducto(req.body, tenantId);
       res.status(201).json(nuevoProducto);
     } catch (error: any) {
       if (error?.code === 'TENANT_MISMATCH') {
@@ -76,12 +71,8 @@ export const createProductoHandler = asyncHandler(
 export const getProductoByIdHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const producto = await productoModel.findProductoByIdAndTenant(tenantId, parsedId.data.id);
+    const { id } = req.params;
+    const producto = await productoModel.findProductoByIdAndTenant(tenantId, Number(id));
     if (!producto) {
       res.status(404).json({ message: 'Producto no encontrado.' });
       return;
@@ -96,21 +87,12 @@ export const getProductoByIdHandler = asyncHandler(
 export const updateProductoHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const parse = UpdateProductoSchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-      return;
-    }
+    const { id } = req.params;
     try {
       const updated = await productoModel.updateProductoByIdAndTenant(
         tenantId,
-        parsedId.data.id,
-        parse.data
+        Number(id),
+        req.body
       );
       if (!updated) {
         res.status(404).json({ message: 'Producto no encontrado.' });
@@ -137,12 +119,8 @@ export const updateProductoHandler = asyncHandler(
 export const desactivarProductoHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const deleted = await productoModel.desactivarProductoByIdAndTenant(tenantId, parsedId.data.id);
+    const { id } = req.params;
+    const deleted = await productoModel.desactivarProductoByIdAndTenant(tenantId, Number(id));
     if (!deleted) {
       res.status(404).json({ message: 'Producto no encontrado.' });
       return;

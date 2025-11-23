@@ -8,17 +8,13 @@ import { RolUsuario } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
 import { type RequestWithTenant } from '../middlewares/tenant.middleware';
 import { RegisterTenantSchema, LoginSchema, VerifyTenantSchema } from '../dtos/auth.dto';
+import { UNIDADES_MEDIDA_SUNAT } from '../config/catalogo-sunat';
 
 /**
  * Registra un nuevo tenant y su usuario administrador
  */
 export const registerTenantHandler = asyncHandler(async (req: Request, res: Response) => {
-    const parse = RegisterTenantSchema.safeParse(req.body);
-    if (!parse.success) {
-        res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-        return;
-    }
-    const { nombre_empresa, subdominio, email, password } = parse.data;
+    const { nombre_empresa, subdominio, email, password } = req.body;
 
     const existingTenant = await tenantModel.findTenantBySubdominio(subdominio);
     if (existingTenant) {
@@ -35,10 +31,28 @@ export const registerTenantHandler = asyncHandler(async (req: Request, res: Resp
             tx
         );
         const newAdmin = await usuarioModel.createUsuario(
-            { email, password_hash, rol: RolUsuario.admin, nombre: null, isActive: true },
+            { 
+                email, 
+                password_hash, 
+                rol: RolUsuario.admin, 
+                nombre: `Administrador - ${nombre_empresa}`,  // ✅ Asignar nombre descriptivo
+                isActive: true 
+            },
             newTenant.id,
             tx
         );
+
+        // HITO 1: Poblar UnidadesMedida con códigos oficiales SUNAT (Catálogo 03)
+        // Referencia: Resolución de Superintendencia N° 097-2012/SUNAT
+        await tx.unidadesMedida.createMany({
+            data: UNIDADES_MEDIDA_SUNAT.map(unidad => ({
+                codigo: unidad.codigo,
+                nombre: unidad.nombre,
+                permite_decimales: unidad.permite_decimales,
+                tenant_id: newTenant.id
+            }))
+        });
+
         return { newTenant, newAdmin };
     });
 
@@ -46,8 +60,13 @@ export const registerTenantHandler = asyncHandler(async (req: Request, res: Resp
     console.log(`TODO: Enviar email de validación a ${email} con Resend.`);
     
     res.status(201).json({
-        message: "Tenant registrado exitosamente. Revisa tu email para validar.",
-        tenantId: result.newTenant.id
+        message: "Tenant registrado exitosamente. Requiere activación manual en desarrollo.",
+        tenant: {
+            id: result.newTenant.id,
+            nombre_empresa: result.newTenant.nombre_empresa,
+            subdominio: result.newTenant.subdominio,
+            isActive: result.newTenant.isActive
+        }
     });
 });
 
@@ -55,12 +74,7 @@ export const registerTenantHandler = asyncHandler(async (req: Request, res: Resp
  * Autentica un usuario dentro de un tenant específico
  */
 export const loginHandler = asyncHandler(async (req: RequestWithTenant, res: Response) => {
-    const parse = LoginSchema.safeParse(req.body);
-    if (!parse.success) {
-        res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-        return;
-    }
-    const { email, password } = parse.data;
+    const { email, password } = req.body;
     const tenantId = req.tenantId;
 
     if (!email || !password || !tenantId) {
@@ -94,12 +108,13 @@ export const loginHandler = asyncHandler(async (req: RequestWithTenant, res: Res
     );
 
     res.status(200).json({
-        message: "Login exitoso.",
         token: token,
-        usuario: {
+        user: {
             id: usuario.id,
             email: usuario.email,
-            rol: usuario.rol
+            nombre: usuario.nombre,
+            rol: usuario.rol,
+            tenantId: req.tenantId
         }
     });
 });
@@ -116,12 +131,7 @@ export const verifyTenantHandler = asyncHandler(async (req: Request, res: Respon
         return;
     }
 
-    const parse = VerifyTenantSchema.safeParse(req.body);
-    if (!parse.success) {
-        res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-        return;
-    }
-    const { tenantId, subdominio } = parse.data;
+    const { tenantId, subdominio } = req.body;
 
     let tenant: Awaited<ReturnType<typeof tenantModel.findTenantById>> | null = null;
     if (tenantId) {

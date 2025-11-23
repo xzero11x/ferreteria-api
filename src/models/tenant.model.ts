@@ -12,13 +12,30 @@ export const findTenantBySubdominio = async (subdominio: string) => {
 
 /**
  * Crea un nuevo tenant dentro de una transacción
+ * Inicializa configuración con datos básicos de la empresa
  */
 export const createTenant = async (
     data: { nombre_empresa: string, subdominio: string },
     tx: Prisma.TransactionClient
 ) => {
     return tx.tenants.create({
-        data,
+        data: {
+            nombre_empresa: data.nombre_empresa,
+            subdominio: data.subdominio,
+            configuracion: {
+                empresa: {
+                    nombre_empresa: data.nombre_empresa,
+                    ruc: null,
+                    direccion: null,
+                    telefono: null,
+                    email: null
+                },
+                fiscal: {
+                    tasa_igv_global: 18.0,
+                    afectacion_igv_defecto: 'GRAVADO'
+                }
+            }
+        },
     });
 };
 
@@ -54,6 +71,54 @@ export const updateTenantConfiguracionById = async (
 ) => {
   return db.tenants.update({
     where: { id },
-    data: { configuracion },
+    data: { configuracion: configuracion as any },
   });
+};
+
+/**
+ * Obtiene la configuración tributaria del tenant
+ * Retorna valores por defecto si no existe configuración
+ */
+export const getTenantFiscalConfig = async (tenantId: number) => {
+  const tenant = await db.tenants.findUnique({
+    where: { id: tenantId },
+    select: { configuracion: true },
+  });
+
+  const config = (tenant?.configuracion as any) || {};
+  const facturacion = config.facturacion || {};
+
+  return {
+    impuesto_nombre: facturacion.impuesto_nombre || 'IGV',
+    tasa_impuesto: facturacion.tasa_impuesto ?? 18.00,
+    es_agente_retencion: facturacion.es_agente_retencion || false,
+    exonerado_regional: facturacion.exonerado_regional || false,
+  };
+};
+
+/**
+ * Actualiza solo la configuración tributaria del tenant
+ */
+export const updateTenantFiscalConfig = async (
+  tenantId: number,
+  fiscalConfig: {
+    impuesto_nombre?: string;
+    tasa_impuesto?: number;
+    es_agente_retencion?: boolean;
+    exonerado_regional?: boolean;
+  }
+) => {
+  const tenant = await findTenantById(tenantId);
+  if (!tenant) throw new Error('Tenant no encontrado');
+
+  const currentConfig = (tenant.configuracion as any) || {};
+  const updatedConfig = {
+    ...currentConfig,
+    facturacion: {
+      ...(currentConfig.facturacion || {}),
+      ...fiscalConfig,
+    },
+  };
+
+  return updateTenantConfiguracionById(tenantId, updatedConfig as Prisma.JsonValue);
 };

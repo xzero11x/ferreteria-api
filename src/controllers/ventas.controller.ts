@@ -4,6 +4,7 @@ import { type RequestWithAuth } from '../middlewares/auth.middleware';
 import { IdParamSchema } from '../dtos/common.dto';
 import { CreateVentaSchema, ListVentasQuerySchema, UpdateVentaSchema } from '../dtos/venta.dto';
 import * as ventaModel from '../models/venta.model';
+import * as auditService from '../services/audit.service';
 
 /**
  * GET /api/ventas — Lista todas las ventas del tenant con paginación, búsqueda y filtros
@@ -11,11 +12,6 @@ import * as ventaModel from '../models/venta.model';
 export const getVentasHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parseQuery = ListVentasQuerySchema.safeParse(req.query);
-    if (!parseQuery.success) {
-      res.status(400).json({ message: 'Query inválida', errors: parseQuery.error.flatten() });
-      return;
-    }
 
     // Parámetros de paginación
     const page = parseInt(req.query.page as string) || 1;
@@ -31,20 +27,41 @@ export const getVentasHandler = asyncHandler(
       skip,
       take: validLimit,
       search: search.trim() || undefined,
-      cliente_id: parseQuery.data.cliente_id,
-      fecha_inicio: parseQuery.data.fecha_inicio ? new Date(parseQuery.data.fecha_inicio) : undefined,
-      fecha_fin: parseQuery.data.fecha_fin ? new Date(parseQuery.data.fecha_fin) : undefined,
+      cliente_id: req.query.cliente_id ? Number(req.query.cliente_id) : undefined,
+      fecha_inicio: req.query.fecha_inicio ? new Date(req.query.fecha_inicio as string) : undefined,
+      fecha_fin: req.query.fecha_fin ? new Date(req.query.fecha_fin as string) : undefined,
     };
 
     const { total, data: ventas } = await ventaModel.findVentasPaginadas(tenantId, filters);
 
+    // Devolver objeto completo según VentaResponseSchema (incluye tenant_id, serie y detalles)
     const result = ventas.map((v) => ({
       id: v.id,
       total: v.total,
       metodo_pago: v.metodo_pago,
       created_at: v.created_at,
-      cliente: v.cliente ? { id: v.cliente.id, nombre: v.cliente.nombre } : null,
-      usuario: v.usuario ? { id: v.usuario.id, nombre: v.usuario.nombre } : null,
+      tenant_id: v.tenant_id,
+      cliente_id: v.cliente_id,
+      cliente: v.cliente,
+      usuario_id: v.usuario_id,
+      usuario: v.usuario,
+      pedido_origen_id: v.pedido_origen_id,
+      sesion_caja_id: v.sesion_caja_id,
+      serie_id: v.serie_id,
+      serie: v.serie,
+      numero_comprobante: v.numero_comprobante,
+      detalles: v.VentaDetalles.map((d) => ({
+        id: d.id,
+        producto_id: d.producto_id,
+        producto: d.producto,
+        cantidad: d.cantidad,
+        valor_unitario: d.valor_unitario,
+        precio_unitario: d.precio_unitario,
+        igv_total: d.igv_total,
+        tasa_igv: d.tasa_igv,
+        tenant_id: d.tenant_id,
+        venta_id: d.venta_id,
+      })),
     }));
 
     res.status(200).json({
@@ -65,51 +82,43 @@ export const getVentasHandler = asyncHandler(
 export const getVentaByIdHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
+    const id = Number(req.params.id);
 
-    const venta = await ventaModel.findVentaByIdAndTenant(tenantId, parsedId.data.id);
+    const venta = await ventaModel.findVentaByIdAndTenant(tenantId, id);
     if (!venta) {
       res.status(404).json({ message: 'Venta no encontrada.' });
       return;
     }
 
+    // Mapear detalles según DetalleVentaResponseSchema (incluye todos los campos fiscales)
     const detalles = venta.VentaDetalles.map((d) => ({
       id: d.id,
       producto_id: d.producto_id,
-      producto_nombre: d.producto?.nombre ?? null,
-      producto_sku: d.producto?.sku ?? null,
+      producto: d.producto,
       cantidad: d.cantidad,
+      valor_unitario: d.valor_unitario,
       precio_unitario: d.precio_unitario,
-      subtotal: Number(d.precio_unitario) * d.cantidad,
+      igv_total: d.igv_total,
+      tasa_igv: d.tasa_igv,
+      tenant_id: d.tenant_id,
+      venta_id: d.venta_id,
     }));
 
+    // Devolver objeto completo según VentaResponseSchema
     res.status(200).json({
       id: venta.id,
       total: venta.total,
       metodo_pago: venta.metodo_pago,
       created_at: venta.created_at,
-      cliente: venta.cliente
-        ? {
-            id: venta.cliente.id,
-            nombre: venta.cliente.nombre,
-            email: venta.cliente.email,
-            telefono: venta.cliente.telefono,
-          }
-        : null,
-      usuario: venta.usuario
-        ? { id: venta.usuario.id, nombre: venta.usuario.nombre }
-        : null,
-      pedido_origen: venta.pedido_origen
-        ? {
-            id: venta.pedido_origen.id,
-            estado: venta.pedido_origen.estado,
-            tipo_recojo: venta.pedido_origen.tipo_recojo,
-          }
-        : null,
+      tenant_id: venta.tenant_id,
+      cliente_id: venta.cliente_id,
+      cliente: venta.cliente,
+      usuario_id: venta.usuario_id,
+      usuario: venta.usuario,
+      pedido_origen_id: venta.pedido_origen_id,
+      sesion_caja_id: venta.sesion_caja_id,
+      serie_id: venta.serie_id,
+      numero_comprobante: venta.numero_comprobante,
       detalles,
     });
   }
@@ -118,26 +127,49 @@ export const getVentaByIdHandler = asyncHandler(
 /**
  * POST /api/ventas — Crea una nueva venta (POS)
  * Valida stock y descuenta automáticamente
+ * Requiere sesión de caja activa (validado por middleware requireSesionCajaActiva)
  */
 export const createVentaHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
     const usuarioId = req.user?.id;
-    const parse = CreateVentaSchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-      return;
-    }
+    const sesionCajaId = (req as any).sesionCajaId; // Proporcionado por middleware requireSesionCajaActiva
 
     try {
-      const nuevaVenta = await ventaModel.createVenta(parse.data, tenantId, usuarioId);
-      res.status(201).json({
-        id: nuevaVenta.id,
-        total: nuevaVenta.total,
-        metodo_pago: nuevaVenta.metodo_pago,
-        created_at: nuevaVenta.created_at,
-      });
+      const nuevaVenta = await ventaModel.createVenta(
+        req.body,
+        tenantId,
+        sesionCajaId,
+        usuarioId
+      );
+      if (usuarioId) {
+        const ipAddress = req.ip ?? req.socket.remoteAddress ?? undefined;
+        const userAgent = req.get('user-agent') ?? undefined;
+        // Registrar auditoría de forma asíncrona sin bloquear la respuesta
+        void auditService.auditarCreacion(
+          usuarioId,
+          tenantId,
+          'Ventas',
+          nuevaVenta.id,
+          {
+            total: nuevaVenta.total,
+            cliente_id: nuevaVenta.cliente_id,
+            sesion_caja_id: nuevaVenta.sesion_caja_id,
+            serie_id: nuevaVenta.serie_id,
+            numero_comprobante: nuevaVenta.numero_comprobante,
+          },
+          ipAddress,
+          userAgent
+        );
+      }
+      // Devolver objeto completo según VentaResponseSchema
+      res.status(201).json(nuevaVenta);
     } catch (error: any) {
+      console.error('❌ Error al crear venta:', error);
+      console.error('Error code:', error?.code);
+      console.error('Error message:', error?.message);
+      console.error('Body recibido:', JSON.stringify(req.body, null, 2));
+      
       if (error?.code === 'PRODUCTO_NOT_FOUND') {
         res.status(404).json({ message: error.message });
         return;
@@ -146,7 +178,10 @@ export const createVentaHandler = asyncHandler(
         res.status(409).json({ message: error.message });
         return;
       }
-      console.error('Error al crear venta:', error);
+      if (error?.code === 'SERIE_NOT_FOUND') {
+        res.status(404).json({ message: error.message });
+        return;
+      }
       res.status(500).json({ message: 'Error al crear venta.' });
     }
   }
@@ -159,33 +194,20 @@ export const createVentaHandler = asyncHandler(
 export const updateVentaHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const parse = UpdateVentaSchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-      return;
-    }
+    const id = Number(req.params.id);
 
     const updated = await ventaModel.updateVentaByIdAndTenant(
       tenantId,
-      parsedId.data.id,
-      parse.data
+      id,
+      req.body
     );
     if (!updated) {
       res.status(404).json({ message: 'Venta no encontrada.' });
       return;
     }
 
-    res.status(200).json({
-      id: updated.id,
-      total: updated.total,
-      metodo_pago: updated.metodo_pago,
-      created_at: updated.created_at,
-    });
+    // Devolver objeto completo según VentaResponseSchema
+    res.status(200).json(updated);
   }
 );
 
@@ -196,13 +218,9 @@ export const updateVentaHandler = asyncHandler(
 export const deleteVentaHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
+    const id = Number(req.params.id);
 
-    const deleted = await ventaModel.deleteVentaByIdAndTenant(tenantId, parsedId.data.id);
+    const deleted = await ventaModel.deleteVentaByIdAndTenant(tenantId, id);
     if (!deleted) {
       res.status(404).json({ message: 'Venta no encontrada.' });
       return;

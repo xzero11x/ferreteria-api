@@ -1,13 +1,6 @@
 import { type Response } from 'express';
 import asyncHandler from 'express-async-handler';
 import { type RequestWithAuth } from '../middlewares/auth.middleware';
-import { IdParamSchema } from '../dtos/common.dto';
-import {
-  CreateOrdenCompraSchema,
-  UpdateOrdenCompraSchema,
-  RecibirOrdenCompraSchema,
-  ListOrdenesCompraQuerySchema,
-} from '../dtos/orden-compra.dto';
 import * as ordenCompraModel from '../models/orden-compra.model';
 import { EstadoOrdenCompra } from '@prisma/client';
 
@@ -17,17 +10,12 @@ import { EstadoOrdenCompra } from '@prisma/client';
 export const getOrdenesCompraHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parseQuery = ListOrdenesCompraQuerySchema.safeParse(req.query);
-    if (!parseQuery.success) {
-      res.status(400).json({ message: 'Query inválida', errors: parseQuery.error.flatten() });
-      return;
-    }
 
     const filters = {
-      proveedor_id: parseQuery.data.proveedor_id,
-      estado: parseQuery.data.estado as EstadoOrdenCompra | undefined,
-      fecha_inicio: parseQuery.data.fecha_inicio ? new Date(parseQuery.data.fecha_inicio) : undefined,
-      fecha_fin: parseQuery.data.fecha_fin ? new Date(parseQuery.data.fecha_fin) : undefined,
+      proveedor_id: req.query.proveedor_id ? Number(req.query.proveedor_id) : undefined,
+      estado: req.query.estado as EstadoOrdenCompra | undefined,
+      fecha_inicio: req.query.fecha_inicio ? new Date(req.query.fecha_inicio as string) : undefined,
+      fecha_fin: req.query.fecha_fin ? new Date(req.query.fecha_fin as string) : undefined,
     };
 
     const ordenes = await ordenCompraModel.findAllOrdenesCompraByTenant(tenantId, filters);
@@ -35,6 +23,12 @@ export const getOrdenesCompraHandler = asyncHandler(
     const result = ordenes.map((o) => ({
       id: o.id,
       total: o.total,
+      subtotal_base: o.subtotal_base,
+      impuesto_igv: o.impuesto_igv,
+      tipo_comprobante: o.tipo_comprobante,
+      serie: o.serie,
+      numero: o.numero,
+      fecha_emision: o.fecha_emision,
       estado: o.estado,
       fecha_creacion: o.fecha_creacion,
       fecha_recepcion: o.fecha_recepcion,
@@ -48,7 +42,7 @@ export const getOrdenesCompraHandler = asyncHandler(
       usuario: o.usuario ? { id: o.usuario.id, nombre: o.usuario.nombre } : null,
     }));
 
-    res.status(200).json(result);
+    res.status(200).json({ data: result });
   }
 );
 
@@ -58,13 +52,9 @@ export const getOrdenesCompraHandler = asyncHandler(
 export const getOrdenCompraByIdHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
+    const id = Number(req.params.id);
 
-    const orden = await ordenCompraModel.findOrdenCompraByIdAndTenant(tenantId, parsedId.data.id);
+    const orden = await ordenCompraModel.findOrdenCompraByIdAndTenant(tenantId, id);
     if (!orden) {
       res.status(404).json({ message: 'Orden de compra no encontrada.' });
       return;
@@ -78,12 +68,18 @@ export const getOrdenCompraByIdHandler = asyncHandler(
       stock_actual: d.producto?.stock ?? 0,
       cantidad: d.cantidad,
       costo_unitario: d.costo_unitario,
-      subtotal: Number(d.costo_unitario) * d.cantidad,
+      subtotal: Number(d.costo_unitario) * Number(d.cantidad),
     }));
 
     res.status(200).json({
       id: orden.id,
       total: orden.total,
+      subtotal_base: orden.subtotal_base,
+      impuesto_igv: orden.impuesto_igv,
+      tipo_comprobante: orden.tipo_comprobante,
+      serie: orden.serie,
+      numero: orden.numero,
+      fecha_emision: orden.fecha_emision,
       estado: orden.estado,
       fecha_creacion: orden.fecha_creacion,
       fecha_recepcion: orden.fecha_recepcion,
@@ -111,14 +107,9 @@ export const createOrdenCompraHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
     const usuarioId = req.user?.id;
-    const parse = CreateOrdenCompraSchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-      return;
-    }
 
     try {
-      const nuevaOrden = await ordenCompraModel.createOrdenCompra(parse.data, tenantId, usuarioId);
+      const nuevaOrden = await ordenCompraModel.createOrdenCompra(req.body, tenantId, usuarioId);
       res.status(201).json({
         id: nuevaOrden.id,
         total: nuevaOrden.total,
@@ -135,7 +126,11 @@ export const createOrdenCompraHandler = asyncHandler(
         return;
       }
       console.error('Error al crear orden de compra:', error);
-      res.status(500).json({ message: 'Error al crear orden de compra.' });
+      console.error('Body recibido:', JSON.stringify(req.body, null, 2));
+      res.status(500).json({ 
+        message: 'Error al crear orden de compra.',
+        error: error.message 
+      });
     }
   }
 );
@@ -146,22 +141,13 @@ export const createOrdenCompraHandler = asyncHandler(
 export const updateOrdenCompraHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const parse = UpdateOrdenCompraSchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-      return;
-    }
+    const id = Number(req.params.id);
 
     try {
       const updated = await ordenCompraModel.updateOrdenCompraByIdAndTenant(
         tenantId,
-        parsedId.data.id,
-        parse.data
+        id,
+        req.body
       );
       if (!updated) {
         res.status(404).json({ message: 'Orden de compra no encontrada.' });
@@ -188,35 +174,25 @@ export const updateOrdenCompraHandler = asyncHandler(
 
 /**
  * POST /api/compras/:id/recibir — Registra la recepción de mercadería (actualiza stock)
+ * FASE 2.4: Actualizado para usar RecibirOrdenCompraDTO con validación de serie/número
  */
 export const recibirOrdenCompraHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const parse = RecibirOrdenCompraSchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-      return;
-    }
+    const id = Number(req.params.id);
 
     try {
-      const fechaRecepcion = parse.data.fecha_recepcion
-        ? new Date(parse.data.fecha_recepcion)
-        : undefined;
-
       const ordenRecibida = await ordenCompraModel.recibirOrdenCompra(
         tenantId,
-        parsedId.data.id,
-        fechaRecepcion
+        id,
+        req.body // Ahora usa RecibirOrdenCompraDTO (serie, numero, fecha_recepcion)
       );
 
       res.status(200).json({
         id: ordenRecibida.id,
         estado: ordenRecibida.estado,
+        serie: ordenRecibida.serie,
+        numero: ordenRecibida.numero,
         fecha_recepcion: ordenRecibida.fecha_recepcion,
         message: 'Orden recibida exitosamente. El stock de los productos ha sido actualizado.',
       });
@@ -227,6 +203,14 @@ export const recibirOrdenCompraHandler = asyncHandler(
       }
       if (error?.code === 'ESTADO_INVALIDO') {
         res.status(409).json({ message: error.message });
+        return;
+      }
+      if (error?.code === 'COMPROBANTE_DUPLICADO') {
+        res.status(409).json({ message: error.message });
+        return;
+      }
+      if (error?.code === 'SERIE_INVALIDA' || error?.code === 'NUMERO_INVALIDO') {
+        res.status(400).json({ message: error.message });
         return;
       }
       console.error('Error al recibir orden de compra:', error);
@@ -241,16 +225,12 @@ export const recibirOrdenCompraHandler = asyncHandler(
 export const cancelarOrdenCompraHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
+    const id = Number(req.params.id);
 
     try {
       const ordenCancelada = await ordenCompraModel.cancelarOrdenCompra(
         tenantId,
-        parsedId.data.id
+        id
       );
 
       if (!ordenCancelada) {
@@ -280,16 +260,12 @@ export const cancelarOrdenCompraHandler = asyncHandler(
 export const deleteOrdenCompraHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
+    const id = Number(req.params.id);
 
     try {
       const deleted = await ordenCompraModel.deleteOrdenCompraByIdAndTenant(
         tenantId,
-        parsedId.data.id
+        id
       );
       if (!deleted) {
         res.status(404).json({ message: 'Orden de compra no encontrada.' });

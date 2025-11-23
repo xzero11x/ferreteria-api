@@ -47,14 +47,9 @@ export const getClientesHandler = asyncHandler(
 export const createClienteHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parse = CreateClienteSchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-      return;
-    }
 
     try {
-      const nuevo = await clienteModel.createCliente(parse.data, tenantId);
+      const nuevo = await clienteModel.createCliente(req.body, tenantId);
       res.status(201).json(nuevo);
     } catch (error: any) {
       if (error?.code === 'P2002') {
@@ -72,12 +67,9 @@ export const createClienteHandler = asyncHandler(
 export const getClienteByIdHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const cliente = await clienteModel.findClienteByIdAndTenant(tenantId, parsedId.data.id);
+    const id = Number(req.params.id);
+
+    const cliente = await clienteModel.findClienteByIdAndTenant(tenantId, id);
     if (!cliente) {
       res.status(404).json({ message: 'Cliente no encontrado.' });
       return;
@@ -92,21 +84,13 @@ export const getClienteByIdHandler = asyncHandler(
 export const updateClienteHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const parse = UpdateClienteSchema.safeParse(req.body);
-    if (!parse.success) {
-      res.status(400).json({ message: 'Datos inválidos', errors: parse.error.flatten() });
-      return;
-    }
+    const id = Number(req.params.id);
+
     try {
       const updated = await clienteModel.updateClienteByIdAndTenant(
         tenantId,
-        parsedId.data.id,
-        parse.data
+        id,
+        req.body
       );
       if (!updated) {
         res.status(404).json({ message: 'Cliente no encontrado.' });
@@ -129,12 +113,9 @@ export const updateClienteHandler = asyncHandler(
 export const desactivarClienteHandler = asyncHandler(
   async (req: RequestWithAuth, res: Response) => {
     const tenantId = req.tenantId!;
-    const parsedId = IdParamSchema.safeParse({ id: req.params.id });
-    if (!parsedId.success) {
-      res.status(400).json({ message: 'ID inválido', errors: parsedId.error.flatten() });
-      return;
-    }
-    const deleted = await clienteModel.desactivarClienteByIdAndTenant(tenantId, parsedId.data.id);
+    const id = Number(req.params.id);
+
+    const deleted = await clienteModel.desactivarClienteByIdAndTenant(tenantId, id);
     if (!deleted) {
       res.status(404).json({ message: 'Cliente no encontrado.' });
       return;

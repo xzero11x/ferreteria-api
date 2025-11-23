@@ -36,7 +36,8 @@ export const createProveedor = async (
   return prismaClient.proveedores.create({
     data: {
       nombre: data.nombre,
-      ruc_identidad: data.ruc_identidad ?? null,
+      tipo_documento: data.tipo_documento,
+      ruc_identidad: data.ruc_identidad,
       email: data.email ?? null,
       telefono: data.telefono ?? null,
       direccion: data.direccion ?? null,
@@ -59,6 +60,7 @@ export const updateProveedorByIdAndTenant = async (
     where: { id },
     data: {
       nombre: data.nombre ?? existing.nombre,
+      tipo_documento: data.tipo_documento ?? existing.tipo_documento,
       ruc_identidad: data.ruc_identidad ?? existing.ruc_identidad,
       email: data.email ?? existing.email,
       telefono: data.telefono ?? existing.telefono,

@@ -16,7 +16,7 @@ export const generarKardexCompleto = async (
 
   if (!producto) return null;
 
-  // 1. Obtener ventas (salidas) - usamos la fecha de la venta padre
+  // 1. Obtener ventas (salidas) - con información fiscal completa
   const ventas = await db.ventaDetalles.findMany({
     where: {
       producto_id: productoId,
@@ -30,15 +30,22 @@ export const generarKardexCompleto = async (
         select: {
           id: true,
           created_at: true,
+          numero_comprobante: true,
+          serie: {
+            select: { codigo: true },
+          },
           cliente: {
-            select: { nombre: true },
+            select: { 
+              nombre: true,
+              documento_identidad: true,
+            },
           },
         },
       },
     },
   });
 
-  // 2. Obtener compras (entradas) - solo las recibidas
+  // 2. Obtener compras (entradas) - con información fiscal completa
   const compras = await db.ordenCompraDetalles.findMany({
     where: {
       producto_id: productoId,
@@ -55,8 +62,13 @@ export const generarKardexCompleto = async (
         select: {
           id: true,
           fecha_recepcion: true,
+          serie: true,
+          numero: true,
           proveedor: {
-            select: { nombre: true },
+            select: { 
+              nombre: true,
+              ruc_identidad: true,
+            },
           },
         },
       },
@@ -87,6 +99,8 @@ export const generarKardexCompleto = async (
     tipo: 'venta' | 'compra' | 'ajuste_entrada' | 'ajuste_salida';
     cantidad: number;
     referencia: string;
+    tercero?: string;
+    tercero_documento?: string; // RUC/DNI del cliente o proveedor
     motivo?: string;
     responsable?: string;
     precio_unitario?: number;
@@ -94,35 +108,52 @@ export const generarKardexCompleto = async (
 
   const movimientos: MovimientoKardex[] = [];
 
-  // Mapear ventas
+  // Mapear ventas con formato fiscal
   ventas.forEach((v) => {
+    // Formato: B001-000045 (serie-numero)
+    const referencia = v.venta.serie?.codigo && v.venta.numero_comprobante
+      ? `${v.venta.serie.codigo}-${String(v.venta.numero_comprobante).padStart(6, '0')}`
+      : `Venta #${v.venta.id}`;
+
     movimientos.push({
       fecha: v.venta.created_at,
       tipo: 'venta',
-      cantidad: v.cantidad,
-      referencia: `Venta #${v.venta.id} - ${v.venta.cliente?.nombre || 'Cliente desconocido'}`,
+      cantidad: Number(v.cantidad),
+      referencia,
+      tercero: v.venta.cliente?.nombre || 'Cliente desconocido',
+      tercero_documento: v.venta.cliente?.documento_identidad || undefined,
       precio_unitario: Number(v.precio_unitario),
     });
   });
 
-  // Mapear compras
+  // Mapear compras con formato fiscal
   compras.forEach((c) => {
+    // Formato: F005-000345 (serie-numero del proveedor)
+    const referencia = c.orden_compra.serie && c.orden_compra.numero
+      ? `${c.orden_compra.serie}-${c.orden_compra.numero}`
+      : `Compra #${c.orden_compra.id}`;
+
     movimientos.push({
       fecha: c.orden_compra.fecha_recepcion || new Date(),
       tipo: 'compra',
-      cantidad: c.cantidad,
-      referencia: `Compra #${c.orden_compra.id} - ${c.orden_compra.proveedor?.nombre || 'Proveedor desconocido'}`,
+      cantidad: Number(c.cantidad),
+      referencia,
+      tercero: c.orden_compra.proveedor?.nombre || 'Proveedor desconocido',
+      tercero_documento: c.orden_compra.proveedor?.ruc_identidad || undefined,
       precio_unitario: Number(c.costo_unitario),
     });
   });
 
-  // Mapear ajustes
+  // Mapear ajustes con formato mejorado
   ajustes.forEach((a) => {
+    // Formato: AJUSTE-{id} o ADJ-{id_corto}
+    const referencia = `ADJ-${String(a.id).padStart(4, '0')}`;
+
     movimientos.push({
       fecha: a.created_at,
       tipo: a.tipo === 'entrada' ? 'ajuste_entrada' : 'ajuste_salida',
-      cantidad: a.cantidad,
-      referencia: `Ajuste manual`,
+      cantidad: Number(a.cantidad),
+      referencia,
       motivo: a.motivo || undefined,
       responsable: a.usuario?.nombre || a.usuario?.email || 'Usuario desconocido',
     });
@@ -133,15 +164,15 @@ export const generarKardexCompleto = async (
 
   // 6. Calcular saldo acumulado (stock) en cada momento
   // Empezamos desde el stock actual y vamos hacia atrás
-  let saldoActual = producto.stock;
+  let saldoActual = Number(producto.stock);
   const movimientosConSaldo = movimientos.map((mov) => {
     const saldoAnterior = saldoActual;
 
     // Revertir el movimiento para obtener el saldo anterior
     if (mov.tipo === 'venta' || mov.tipo === 'ajuste_salida') {
-      saldoActual += mov.cantidad; // Era mayor antes de la salida
+      saldoActual += Number(mov.cantidad); // Era mayor antes de la salida
     } else {
-      saldoActual -= mov.cantidad; // Era menor antes de la entrada
+      saldoActual -= Number(mov.cantidad); // Era menor antes de la entrada
     }
 
     return {
