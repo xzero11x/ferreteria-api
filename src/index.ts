@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { db } from './config/db';
 import authRoutes from './routes/auth.routes';
+import publicRoutes from './routes/public.routes'; // Rutas públicas (sin JWT)
 import productosRoutes from './routes/productos.routes';
 import categoriasRoutes from './routes/categorias.routes';
 import clientesRoutes from './routes/clientes.routes';
@@ -38,19 +39,26 @@ const allowedOrigins = corsOriginsEnv.split(',').map(o => o.trim());
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true); // permitir herramientas como Postman
+
     const isAllowed = allowedOrigins.some((allowed) => {
+      // 1. Coincidencia exacta
       if (allowed === origin) return true;
-      // soporte simple para comodín http://*.localhost:5173
-      if (allowed.includes('*.localhost') && origin.startsWith('http://') && origin.endsWith(':5173')) {
-        return origin.includes('.localhost');
+
+      // 2. Soporte para comodines (ej: http://*.localhost:3001)
+      if (allowed.includes('*')) {
+        // Convierte el patrón del .env (ej: http://*.localhost:3001) en una Expresión Regular
+        // Escapamos los puntos (.) y reemplazamos el asterisco (*) por "cualquier texto"
+        const pattern = allowed
+          .replace(/\./g, '\\.')
+          .replace(/\*/g, '[a-zA-Z0-9-]+');
+
+        const regex = new RegExp(`^${pattern}$`);
+        return regex.test(origin);
       }
-      // soporte simple para https://*.tudominio.com
-      if (allowed.includes('*') && allowed.startsWith('https://') && allowed.endsWith('.com')) {
-        const base = allowed.replace('https://*.', '');
-        return origin.startsWith('https://') && origin.endsWith('.' + base);
-      }
+
       return false;
     });
+
     if (isAllowed) return callback(null, true);
     return callback(new Error('Not allowed by CORS'));
   },
@@ -68,6 +76,11 @@ if (!fs.existsSync(openapiGeneratedPath)) {
   throw new Error('❌ OpenAPI document not found. Run: npm run generate:openapi');
 }
 const openapiGenerated = JSON.parse(fs.readFileSync(openapiGeneratedPath, 'utf-8'));
+
+// Esto fuerza a Swagger a usar la URL actual (f123.localhost...) en lugar de la fija
+openapiGenerated.servers = [{ url: '/', description: 'Servidor Actual' }];
+// --------------------------
+
 
 // Swagger UI - Documentación API (usando el OpenAPI generado)
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openapiGenerated, {
@@ -99,6 +112,9 @@ app.get('/api/healthcheck', async (req: Request, res: Response) => {
 
 // Rutas de la API
 app.use('/api/auth', authRoutes);
+// Rutas públicas (sin autenticación JWT) - deben ir ANTES de las protegidas
+app.use('/api/public', publicRoutes);
+// Rutas protegidas (requieren JWT)
 app.use('/api/productos', productosRoutes);
 app.use('/api/categorias', categoriasRoutes);
 app.use('/api/clientes', clientesRoutes);

@@ -23,6 +23,7 @@ import * as path from 'path';
 // los registry.registerPath() que están dentro de cada uno.
 
 import '../src/routes/auth.routes';
+import '../src/routes/public.routes'; // Rutas públicas (catálogo y checkout)
 import '../src/routes/productos.routes';
 import '../src/routes/categorias.routes';
 import '../src/routes/marcas.routes';
