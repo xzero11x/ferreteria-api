@@ -99,6 +99,10 @@ export const SesionCajaResponseSchema = registry.register(
       description: 'Total de ventas en la sesión',
       example: 380.00,
     }),
+    total_ingresos: z.number().nullable().optional().openapi({
+      description: 'Total de ingresos (movimientos tipo INGRESO)',
+      example: 50.00,
+    }),
     total_egresos: z.number().nullable().openapi({
       description: 'Total de egresos',
       example: 30.00,

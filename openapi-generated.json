@@ -89,6 +89,10 @@
       "description": "Reportes y analíticas"
     },
     {
+      "name": "Dashboard",
+      "description": "Estadísticas y KPIs"
+    },
+    {
       "name": "Tenant",
       "description": "Configuración del tenant"
     }
@@ -4344,6 +4348,222 @@
           "stockActual",
           "totalMovimientos",
           "movimientos"
+        ]
+      },
+      "DashboardVentasEstadisticas": {
+        "type": "object",
+        "properties": {
+          "periodo": {
+            "type": "object",
+            "properties": {
+              "fecha_inicio": {
+                "type": "string",
+                "description": "Fecha de inicio del período"
+              },
+              "fecha_fin": {
+                "type": "string",
+                "description": "Fecha de fin del período"
+              }
+            },
+            "required": [
+              "fecha_inicio",
+              "fecha_fin"
+            ]
+          },
+          "kpis": {
+            "type": "object",
+            "properties": {
+              "ingresos_brutos": {
+                "type": "object",
+                "properties": {
+                  "valor": {
+                    "type": "number",
+                    "description": "Valor actual del KPI"
+                  },
+                  "comparacion_periodo_anterior": {
+                    "type": "number",
+                    "description": "Porcentaje de cambio vs período anterior"
+                  }
+                },
+                "required": [
+                  "valor",
+                  "comparacion_periodo_anterior"
+                ],
+                "description": "Ingresos brutos totales"
+              },
+              "costo_mercaderia": {
+                "type": "object",
+                "properties": {
+                  "valor": {
+                    "type": "number",
+                    "description": "Valor actual del KPI"
+                  },
+                  "comparacion_periodo_anterior": {
+                    "type": "number",
+                    "description": "Porcentaje de cambio vs período anterior"
+                  }
+                },
+                "required": [
+                  "valor",
+                  "comparacion_periodo_anterior"
+                ],
+                "description": "Costo total de mercadería vendida"
+              },
+              "utilidad_neta": {
+                "type": "object",
+                "properties": {
+                  "valor": {
+                    "type": "number",
+                    "description": "Valor actual del KPI"
+                  },
+                  "comparacion_periodo_anterior": {
+                    "type": "number",
+                    "description": "Porcentaje de cambio vs período anterior"
+                  }
+                },
+                "required": [
+                  "valor",
+                  "comparacion_periodo_anterior"
+                ],
+                "description": "Utilidad neta (ingresos - costos)"
+              },
+              "igv_acumulado": {
+                "type": "object",
+                "properties": {
+                  "valor": {
+                    "type": "number",
+                    "description": "Valor actual del KPI"
+                  },
+                  "comparacion_periodo_anterior": {
+                    "type": "number",
+                    "description": "Porcentaje de cambio vs período anterior"
+                  }
+                },
+                "required": [
+                  "valor",
+                  "comparacion_periodo_anterior"
+                ],
+                "description": "IGV total acumulado"
+              }
+            },
+            "required": [
+              "ingresos_brutos",
+              "costo_mercaderia",
+              "utilidad_neta",
+              "igv_acumulado"
+            ]
+          },
+          "margen_bruto_porcentaje": {
+            "type": "number",
+            "description": "Porcentaje de margen bruto general"
+          },
+          "serie_temporal": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "description": "Fecha en formato ISO"
+                },
+                "costo": {
+                  "type": "number",
+                  "description": "Costo de mercadería del día"
+                },
+                "ganancia": {
+                  "type": "number",
+                  "description": "Ganancia/utilidad del día"
+                },
+                "fisica": {
+                  "type": "number",
+                  "description": "Ventas en tienda física"
+                },
+                "web": {
+                  "type": "number",
+                  "description": "Ventas por canal web"
+                }
+              },
+              "required": [
+                "date",
+                "costo",
+                "ganancia",
+                "fisica",
+                "web"
+              ]
+            },
+            "description": "Datos diarios para el gráfico"
+          },
+          "top_productos_rentables": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "nombre": {
+                  "type": "string",
+                  "description": "Nombre del producto"
+                },
+                "unidades": {
+                  "type": "number",
+                  "description": "Unidades vendidas"
+                },
+                "margen": {
+                  "type": "number",
+                  "description": "Porcentaje de margen de ganancia"
+                }
+              },
+              "required": [
+                "nombre",
+                "unidades",
+                "margen"
+              ]
+            },
+            "description": "Top 5 productos más rentables"
+          },
+          "rentabilidad_categorias": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "nombre": {
+                  "type": "string",
+                  "description": "Nombre de la categoría"
+                },
+                "ventas": {
+                  "type": "number",
+                  "description": "Total de ventas en soles"
+                },
+                "margen": {
+                  "type": "number",
+                  "description": "Porcentaje de margen"
+                },
+                "estado": {
+                  "type": "string",
+                  "enum": [
+                    "Excelente",
+                    "Bueno",
+                    "Normal",
+                    "Volumen"
+                  ],
+                  "description": "Estado de rentabilidad"
+                }
+              },
+              "required": [
+                "nombre",
+                "ventas",
+                "margen",
+                "estado"
+              ]
+            },
+            "description": "Rentabilidad por categoría"
+          }
+        },
+        "required": [
+          "periodo",
+          "kpis",
+          "margen_bruto_porcentaje",
+          "serie_temporal",
+          "top_productos_rentables",
+          "rentabilidad_categorias"
         ]
       },
       "AuditoriaLog": {
@@ -20066,6 +20286,206 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/KardexCompleto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error de validación (Datos incorrectos)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Error de validación"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "example": "email"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Email inválido"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "message"
+                        ]
+                      },
+                      "description": "Lista de campos con errores"
+                    }
+                  },
+                  "required": [
+                    "message",
+                    "errors"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado (Token inválido o expirado)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "No autenticado"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido (No tiene permisos suficientes o Tenant inactivo)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "No autorizado"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso no encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Recurso no encontrado"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto (Recurso duplicado)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "El recurso ya existe"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno del servidor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Error interno del servidor"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dashboard/ventas/estadisticas": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Obtener estadísticas del dashboard de ventas",
+        "description": "Retorna KPIs, serie temporal, top productos rentables y rentabilidad por categoría. Permite filtrar por rango de fechas.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Fecha de inicio en formato ISO (YYYY-MM-DD)"
+            },
+            "required": false,
+            "description": "Fecha de inicio en formato ISO (YYYY-MM-DD)",
+            "name": "fecha_inicio",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Fecha de fin en formato ISO (YYYY-MM-DD)"
+            },
+            "required": false,
+            "description": "Fecha de fin en formato ISO (YYYY-MM-DD)",
+            "name": "fecha_fin",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "fisica",
+                "web",
+                "ambos"
+              ],
+              "default": "ambos",
+              "description": "Canal de venta"
+            },
+            "required": false,
+            "description": "Canal de venta",
+            "name": "canal",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estadísticas del dashboard de ventas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardVentasEstadisticas"
                 }
               }
             }

@@ -74,7 +74,7 @@ export const createUsuario = async (
 export const updateUsuarioByIdAndTenant = async (
   tenantId: number,
   id: number,
-  data: { nombre?: string; email?: string; rol?: RolUsuario }
+  data: { nombre?: string; email?: string; rol?: RolUsuario; password_hash?: string }
 ) => {
   const existing = await db.usuarios.findFirst({ where: { id, tenant_id: tenantId } });
   if (!existing) return null;
@@ -84,6 +84,7 @@ export const updateUsuarioByIdAndTenant = async (
       nombre: data.nombre ?? existing.nombre,
       email: data.email ?? existing.email,
       rol: data.rol ?? existing.rol,
+      ...(data.password_hash && { password_hash: data.password_hash }),
     },
     select: {
       id: true,

@@ -216,17 +216,11 @@ export const createVenta = async (
       throw err;
     }
 
-    // 4. Incrementar correlativo de forma atómica
-    const nuevoCorrelativo = serie.correlativo_actual + 1;
-    await tx.series.update({
-      where: { id: serie.id },
-      data: { correlativo_actual: nuevoCorrelativo }
-    });
-
-    // 5. Obtener configuración tributaria del tenant
+    // 4. Obtener configuración tributaria del tenant
     const fiscalConfig = await tenantModel.getTenantFiscalConfig(tenantId);
     
-    // 6. Calcular total y preparar detalles con snapshot fiscal
+    // 5. Validar stock PRIMERO (antes de incrementar correlativo)
+    // Calcular total y preparar detalles con snapshot fiscal
     let total = 0;
     const detallesConIGV: Array<{
       producto_id: number;
@@ -293,7 +287,14 @@ export const createVenta = async (
       total += Number(detalle.precio_unitario) * Number(detalle.cantidad);
     }
 
-    // 6. Crear venta con serie, correlativo y sesión de caja
+    // 6. AHORA SÍ: Incrementar correlativo de forma atómica (después de validar todo)
+    const nuevoCorrelativo = serie.correlativo_actual + 1;
+    await tx.series.update({
+      where: { id: serie.id },
+      data: { correlativo_actual: nuevoCorrelativo }
+    });
+
+    // 7. Crear venta con serie, correlativo y sesión de caja
     const nuevaVenta = await tx.ventas.create({
       data: {
         tenant_id: tenantId,

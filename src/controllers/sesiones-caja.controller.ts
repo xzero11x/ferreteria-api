@@ -9,7 +9,28 @@ export async function abrirSesionHandler(req: RequestWithAuth, res: Response) {
     const sesion = await sesionCajaModel.abrirSesion(tenantId, usuarioId, req.body);
     res.status(201).json(sesion);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    // Manejo de errores específicos con códigos HTTP apropiados
+    const errorMsg = error.message || 'Error desconocido';
+    
+    // 409 Conflict: Recurso ya existe o está ocupado
+    if (errorMsg.includes('ya tienes una sesión') || 
+        errorMsg.includes('ya está siendo usada')) {
+      return res.status(409).json({ error: errorMsg });
+    }
+    
+    // 404 Not Found: Caja no existe
+    if (errorMsg.includes('no existe') || errorMsg.includes('inactiva')) {
+      return res.status(404).json({ error: errorMsg });
+    }
+    
+    // 400 Bad Request: Datos inválidos
+    if (errorMsg.includes('requerido') || errorMsg.includes('inválido')) {
+      return res.status(400).json({ error: errorMsg });
+    }
+    
+    // 500 Internal Server Error: Otros errores
+    console.error('[ERROR abrirSesion]:', error);
+    res.status(500).json({ error: 'Error interno al abrir sesión de caja' });
   }
 }
 
@@ -21,7 +42,20 @@ export async function cerrarSesionHandler(req: RequestWithAuth, res: Response) {
     const sesion = await sesionCajaModel.cerrarSesion(sesionId, tenantId, usuarioId, req.body);
     res.status(200).json(sesion);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    const errorMsg = error.message || 'Error desconocido';
+    
+    // 404 Not Found: Sesión no encontrada
+    if (errorMsg.includes('no encontrada') || errorMsg.includes('ya está cerrada')) {
+      return res.status(404).json({ error: errorMsg });
+    }
+    
+    // 403 Forbidden: No es dueño de la sesión
+    if (errorMsg.includes('no tienes permiso')) {
+      return res.status(403).json({ error: errorMsg });
+    }
+    
+    console.error('[ERROR cerrarSesion]:', error);
+    res.status(500).json({ error: 'Error interno al cerrar sesión de caja' });
   }
 }
 
@@ -84,6 +118,19 @@ export async function cerrarSesionAdministrativoHandler(req: RequestWithAuth, re
     
     res.status(200).json(sesion);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    const errorMsg = error.message || 'Error desconocido';
+    
+    // 404 Not Found: Sesión no encontrada
+    if (errorMsg.includes('no encontrada') || errorMsg.includes('ya está cerrada')) {
+      return res.status(404).json({ error: errorMsg });
+    }
+    
+    // 400 Bad Request: Falta motivo u otros datos requeridos
+    if (errorMsg.includes('requerido') || errorMsg.includes('motivo')) {
+      return res.status(400).json({ error: errorMsg });
+    }
+    
+    console.error('[ERROR cerrarSesionAdministrativo]:', error);
+    res.status(500).json({ error: 'Error interno al cerrar sesión administrativamente' });
   }
 }

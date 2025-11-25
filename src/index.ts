@@ -17,6 +17,7 @@ import ordenesCompraRoutes from './routes/ordenes-compra.routes';
 import tenantRoutes from './routes/tenant.routes';
 import usuariosRoutes from './routes/usuarios.routes';
 import reportesRoutes from './routes/reportes.routes';
+import dashboardRoutes from './routes/dashboard.routes';
 // Hito 3: Control de Caja y SUNAT
 import cajasRoutes from './routes/cajas.routes';
 import sesionesCajaRoutes from './routes/sesiones-caja.routes';
@@ -126,6 +127,7 @@ app.use('/api/compras', ordenesCompraRoutes);
 app.use('/api/tenant', tenantRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/reportes', reportesRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 // Tablas Maestras Normalizadas
 app.use('/api/unidades-medida', unidadesMedidaRoutes);
 app.use('/api/marcas', marcasRoutes);

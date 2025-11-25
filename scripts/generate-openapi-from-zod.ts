@@ -41,6 +41,7 @@ import '../src/routes/movimientos-caja.routes';
 import '../src/routes/usuarios.routes';
 import '../src/routes/tenant.routes';
 import '../src/routes/reportes.routes';
+import '../src/routes/dashboard.routes';
 import '../src/routes/auditoria.routes';
 
 // ============================================================================
@@ -103,6 +104,7 @@ Todos los endpoints (excepto /auth) requieren token JWT en header Authorization:
       { name: 'Usuarios', description: 'Gestión de usuarios del tenant' },
       { name: 'Auditoría', description: 'Logs de auditoría' },
       { name: 'Reportes', description: 'Reportes y analíticas' },
+      { name: 'Dashboard', description: 'Estadísticas y KPIs' },
       { name: 'Tenant', description: 'Configuración del tenant' },
     ],
   });

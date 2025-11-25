@@ -19,7 +19,20 @@ class SesionCajaModel {
     usuarioId: number,
     data: AperturaSesionCajaDTO
   ): Promise<SesionCajaResponseDTO> {
-    // Verificar que no exista otra sesión activa para este usuario
+    // VALIDACIÓN 1: Datos de entrada
+    if (!data.caja_id || typeof data.caja_id !== 'number') {
+      throw new Error('El ID de la caja es requerido y debe ser un número válido');
+    }
+    
+    if (data.monto_inicial === undefined || data.monto_inicial === null) {
+      throw new Error('El monto inicial es requerido');
+    }
+    
+    if (data.monto_inicial < 0) {
+      throw new Error('El monto inicial no puede ser negativo');
+    }
+
+    // VALIDACIÓN 2: Verificar que no exista otra sesión activa para este usuario
     const sesionActiva = await db.sesionesCaja.findFirst({
       where: {
         tenant_id: tenantId,
@@ -32,7 +45,7 @@ class SesionCajaModel {
       throw new Error('Ya tienes una sesión de caja activa. Debes cerrarla antes de abrir una nueva.');
     }
 
-    // CRÍTICO: Verificar que la CAJA FÍSICA no esté ocupada por OTRO usuario
+    // VALIDACIÓN 3 (CRÍTICA): Verificar que la CAJA FÍSICA no esté ocupada por OTRO usuario
     // "Un Cajón, Un Responsable" - Estándar de la industria
     const cajaOcupada = await db.sesionesCaja.findFirst({
       where: {
@@ -60,7 +73,7 @@ class SesionCajaModel {
       );
     }
 
-    // Verificar que la caja exista y esté activa
+    // VALIDACIÓN 4: Verificar que la caja exista y esté activa
     const caja = await db.cajas.findFirst({
       where: {
         id: data.caja_id,
@@ -110,18 +123,39 @@ class SesionCajaModel {
     usuarioId: number,
     data: CierreSesionCajaDTO
   ): Promise<SesionCajaResponseDTO> {
-    // Obtener la sesión
+    // VALIDACIÓN 1: Datos de entrada
+    if (!sesionId || typeof sesionId !== 'number') {
+      throw new Error('El ID de la sesión es requerido y debe ser un número válido');
+    }
+    
+    if (data.monto_final === undefined || data.monto_final === null) {
+      throw new Error('El monto final es requerido');
+    }
+    
+    if (data.monto_final < 0) {
+      throw new Error('El monto final no puede ser negativo');
+    }
+
+    // VALIDACIÓN 2: Verificar que la sesión existe
     const sesion = await db.sesionesCaja.findFirst({
       where: {
         id: sesionId,
         tenant_id: tenantId,
-        usuario_id: usuarioId,
-        estado: 'ABIERTA',
       },
     });
 
     if (!sesion) {
-      throw new Error('Sesión no encontrada o ya está cerrada');
+      throw new Error('Sesión no encontrada');
+    }
+
+    // VALIDACIÓN 3: Verificar que la sesión esté ABIERTA
+    if (sesion.estado !== 'ABIERTA') {
+      throw new Error('La sesión ya está cerrada');
+    }
+
+    // VALIDACIÓN 4 (CRÍTICA): Verificar que el usuario sea el DUEÑO de la sesión
+    if (sesion.usuario_id !== usuarioId) {
+      throw new Error('No tienes permiso para cerrar esta sesión. Solo el usuario que la abrió puede cerrarla.');
     }
 
     // Calcular totales
@@ -211,7 +245,24 @@ class SesionCajaModel {
     adminUsuarioId: number,
     data: { monto_final: number; motivo: string }
   ): Promise<SesionCajaResponseDTO> {
-    // Verificar que la sesión existe y está abierta (SIN validar que sea del admin)
+    // VALIDACIÓN 1: Datos de entrada
+    if (!sesionId || typeof sesionId !== 'number') {
+      throw new Error('El ID de la sesión es requerido y debe ser un número válido');
+    }
+    
+    if (data.monto_final === undefined || data.monto_final === null) {
+      throw new Error('El monto final es requerido');
+    }
+    
+    if (data.monto_final < 0) {
+      throw new Error('El monto final no puede ser negativo');
+    }
+
+    if (!data.motivo || data.motivo.trim().length < 10) {
+      throw new Error('El motivo del cierre administrativo es requerido y debe tener al menos 10 caracteres');
+    }
+
+    // VALIDACIÓN 2: Verificar que la sesión existe y está abierta (SIN validar que sea del admin)
     const sesion = await db.sesionesCaja.findFirst({
       where: {
         id: sesionId,
@@ -348,8 +399,46 @@ class SesionCajaModel {
       };
     }
 
+    // Calcular totales en tiempo real para sesiones ABIERTAS
+    const ventas = await db.ventas.findMany({
+      where: {
+        sesion_caja_id: sesion.id,
+        tenant_id: tenantId,
+      },
+      select: {
+        total: true,
+      },
+    });
+
+    const movimientos = await db.movimientosCaja.findMany({
+      where: {
+        sesion_caja_id: sesion.id,
+        tenant_id: tenantId,
+      },
+      select: {
+        tipo: true,
+        monto: true,
+      },
+    });
+
+    const totalVentas = ventas.reduce((sum, v) => sum + Number(v.total), 0);
+
+    const totalEgresos = movimientos
+      .filter((m) => m.tipo === 'EGRESO')
+      .reduce((sum, m) => sum + Number(m.monto), 0);
+
+    const totalIngresos = movimientos
+      .filter((m) => m.tipo === 'INGRESO')
+      .reduce((sum, m) => sum + Number(m.monto), 0);
+
+    // Mapear sesión con totales calculados
+    const sesionDTO = this.mapSesionToDTO(sesion);
+    sesionDTO.total_ventas = totalVentas;
+    sesionDTO.total_egresos = totalEgresos;
+    sesionDTO.total_ingresos = totalIngresos;
+
     return {
-      sesion: this.mapSesionToDTO(sesion),
+      sesion: sesionDTO,
       tiene_sesion_activa: true,
     };
   }
